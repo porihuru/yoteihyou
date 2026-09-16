@@ -13,21 +13,18 @@ Edge 95 と Internet Explorer 11（IEモードを含む）で動作する、Shar
 
 ## SharePointリスト
 
-カスタムリスト「予定表」を作成し、次の列を用意します。内部名が一致するよう、列は英字の内部名で作成してから表示名を日本語に変更してください。
+既存のSharePoint標準「イベント」リストを使用します。アプリが読み書きする列は次のとおりです。
 
-| 表示名 | 内部名 | 種類 | 必須 | 初期値 |
-|---|---|---|---|---|
-| 件名 | `Title` | 1行テキスト | はい | － |
-| 開始日時 | `StartDate` | 日付と時刻 | はい | － |
-| 終了日時 | `EndDate` | 日付と時刻 | いいえ | － |
-| 終日 | `AllDay` | はい／いいえ | いいえ | いいえ |
-| 区分 | `Category` | 1行テキスト | いいえ | － |
-| 場所 | `Location` | 1行テキスト | いいえ | － |
-| 内容 | `Description` | 複数行テキスト（プレーンテキスト） | いいえ | － |
-| 表示順 | `SortOrder` | 数値 | いいえ | 0 |
-| 表示する | `IsActive` | はい／いいえ | いいえ | はい |
+| 表示名 | 内部名 |
+|---|---|
+| タイトル | `Title` |
+| 開始時刻 | `EventDate` |
+| 終了時刻 | `EndDate` |
+| 分類 | `Category` |
+| 場所 | `Location` |
+| 説明 | `Description` |
 
-既存列の `ID` はそのまま使用します。
+`ID` は既存の標準列を使用します。バナーURL、位置情報、空き時間情報、重複予約のチェック、出席者、設備、目的、登録・更新情報など、アプリで使用しない列は変更しません。
 
 ## 設定
 
@@ -49,12 +46,11 @@ sharePoint: {
 `data/schedule.csv` の列構成は次のとおりです。
 
 ```text
-ID,Title,StartDate,EndDate,AllDay,Category,Location,Description,SortOrder,IsActive
+ID,Title,EventDate,EndDate,Category,Location,Description
 ```
 
 - 文字コード: UTF-8（BOMあり・なしの両方に対応）
 - 日時: `YYYY-MM-DD HH:mm`
-- 真偽値: `true/false`、`1/0`、`yes`、`はい`、`○` に対応
 - カンマや改行を含む値: ダブルクォートで囲む
 
 ブラウザの制約上、CSVをサーバー上へ直接上書きしません。試験中の編集結果を保存する場合もSharePointへ切り替えます。

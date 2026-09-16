@@ -19,14 +19,11 @@
             fields: {
                 id: "ID",
                 title: "Title",
-                startDate: "StartDate",
+                startDate: "EventDate",
                 endDate: "EndDate",
-                allDay: "AllDay",
                 category: "Category",
                 location: "Location",
-                description: "Description",
-                sortOrder: "SortOrder",
-                isActive: "IsActive"
+                description: "Description"
             }
         }
     };

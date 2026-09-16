@@ -76,18 +76,17 @@
         var f = this.fields;
         var startDate = row[f.startDate] ? new Date(row[f.startDate]) : null;
         var endDate = row[f.endDate] ? new Date(row[f.endDate]) : null;
-        var active = row[f.isActive];
         return {
             id: row[f.id],
             title: row[f.title] || "",
             startDate: startDate,
             endDate: endDate || startDate,
-            allDay: util.isTrue(row[f.allDay]),
+            allDay: false,
             category: row[f.category] || "",
             location: row[f.location] || "",
             description: row[f.description] || "",
-            sortOrder: parseInt(row[f.sortOrder], 10) || 0,
-            isActive: active === null || typeof active === "undefined" ? true : util.isTrue(active),
+            sortOrder: 0,
+            isActive: true,
             source: "sharepoint"
         };
     };
@@ -95,13 +94,13 @@
     SharePointDataSource.prototype.load = function (success, failure) {
         var self = this;
         var f = this.fields;
-        var select = [f.id, f.title, f.startDate, f.endDate, f.allDay, f.category, f.location, f.description, f.sortOrder, f.isActive].join(",");
+        var select = [f.id, f.title, f.startDate, f.endDate, f.category, f.location, f.description].join(",");
         var url;
         var items = [];
 
         try {
             url = this.getApiUrl(this.getListPath() + "/items?$select=" + encodeURIComponent(select) +
-                "&$orderby=" + encodeURIComponent(f.startDate + " asc," + f.sortOrder + " asc") +
+                "&$orderby=" + encodeURIComponent(f.startDate + " asc") +
                 "&$top=" + encodeURIComponent(this.pageSize));
         } catch (error) {
             failure(error.message);
@@ -117,9 +116,7 @@
                     data = util.getJson(xhr);
                     results = data.d && data.d.results ? data.d.results : [];
                     for (i = 0; i < results.length; i += 1) {
-                        if (self.toItem(results[i]).isActive) {
-                            items.push(self.toItem(results[i]));
-                        }
+                        items.push(self.toItem(results[i]));
                     }
                     if (data.d && data.d.__next) {
                         loadPage(data.d.__next);
@@ -175,12 +172,9 @@
         payload[f.title] = item.title;
         payload[f.startDate] = util.toIsoString(item.startDate);
         payload[f.endDate] = util.toIsoString(item.endDate || item.startDate);
-        payload[f.allDay] = item.allDay === true;
         payload[f.category] = item.category || "";
         payload[f.location] = item.location || "";
         payload[f.description] = item.description || "";
-        payload[f.sortOrder] = parseInt(item.sortOrder, 10) || 0;
-        payload[f.isActive] = item.isActive !== false;
         return payload;
     };
 

@@ -204,12 +204,9 @@
         byId("event-name").value = "";
         byId("start-date").value = util.formatDateKey(new Date()) + " 09:00";
         byId("end-date").value = util.formatDateKey(new Date()) + " 10:00";
-        byId("all-day").checked = false;
         byId("category").value = "";
         byId("location").value = "";
         byId("description").value = "";
-        byId("sort-order").value = "0";
-        byId("is-active").checked = true;
     }
 
     function openEditor(item) {
@@ -222,12 +219,9 @@
             byId("event-name").value = item.title;
             byId("start-date").value = util.formatDateTime(item.startDate);
             byId("end-date").value = util.formatDateTime(item.endDate);
-            byId("all-day").checked = item.allDay;
             byId("category").value = item.category;
             byId("location").value = item.location;
             byId("description").value = item.description;
-            byId("sort-order").value = item.sortOrder;
-            byId("is-active").checked = item.isActive !== false;
         } else {
             byId("editor-title").innerHTML = "予定を追加";
         }
@@ -266,12 +260,12 @@
             title: title,
             startDate: startDate,
             endDate: endDate,
-            allDay: byId("all-day").checked,
+            allDay: false,
             category: util.trim(byId("category").value),
             location: util.trim(byId("location").value),
             description: util.trim(byId("description").value),
-            sortOrder: parseInt(byId("sort-order").value, 10) || 0,
-            isActive: byId("is-active").checked,
+            sortOrder: 0,
+            isActive: true,
             source: "sharepoint"
         };
     }

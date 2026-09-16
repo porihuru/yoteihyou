@@ -64,20 +64,19 @@
     }
 
     function normalizeItem(source, rowNumber) {
-        var startDate = util.parseDate(source.StartDate);
+        var startDate = util.parseDate(source.EventDate);
         var endDate = util.parseDate(source.EndDate);
-        var activeText = util.trim(source.IsActive);
         return {
             id: util.trim(source.ID) || "csv-" + rowNumber,
             title: util.trim(source.Title),
             startDate: startDate,
             endDate: endDate || startDate,
-            allDay: util.isTrue(source.AllDay),
+            allDay: false,
             category: util.trim(source.Category),
             location: util.trim(source.Location),
             description: util.trim(source.Description),
-            sortOrder: parseInt(source.SortOrder, 10) || 0,
-            isActive: activeText === "" ? true : util.isTrue(activeText),
+            sortOrder: 0,
+            isActive: true,
             source: "csv"
         };
     }
