@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>予定表</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app" class="app-shell">
+        <div class="app-header">
+            <h1 id="app-title">予定表</h1>
+            <div class="source-switch" role="group" aria-label="データ接続先">
+                <span class="source-label">データ接続：</span>
+                <label><input type="radio" name="data-source" id="source-csv" value="csv"> 試験用CSV</label>
+                <label><input type="radio" name="data-source" id="source-sharepoint" value="sharepoint"> SharePoint</label>
+                <button type="button" id="reload-button" class="button button-small">再読込</button>
+            </div>
+            <div id="connection-status" class="connection-status" aria-live="polite">読込準備中</div>
+        </div>
+
+        <div id="message" class="message" aria-live="polite"></div>
+
+        <div class="toolbar">
+            <button type="button" id="previous-month" class="button">前月</button>
+            <button type="button" id="current-month" class="button">今月</button>
+            <button type="button" id="next-month" class="button">翌月</button>
+            <span id="month-title" class="month-title"></span>
+            <button type="button" id="new-event" class="button button-primary toolbar-right">予定を追加</button>
+        </div>
+
+        <div class="calendar-wrap">
+            <table class="calendar" aria-label="月間予定表">
+                <thead>
+                    <tr>
+                        <th class="sunday">日</th>
+                        <th>月</th>
+                        <th>火</th>
+                        <th>水</th>
+                        <th>木</th>
+                        <th>金</th>
+                        <th class="saturday">土</th>
+                    </tr>
+                </thead>
+                <tbody id="calendar-body"></tbody>
+            </table>
+        </div>
+
+        <div id="event-editor" class="editor-panel" style="display:none;">
+            <h2 id="editor-title">予定を追加</h2>
+            <form id="event-form">
+                <input type="hidden" id="event-id" value="">
+                <div class="form-row">
+                    <label for="event-name">件名 <span class="required">必須</span></label>
+                    <input type="text" id="event-name" maxlength="255">
+                </div>
+                <div class="form-row form-row-half">
+                    <div>
+                        <label for="start-date">開始日時 <span class="required">必須</span></label>
+                        <input type="text" id="start-date" placeholder="2026-09-16 09:00">
+                    </div>
+                    <div>
+                        <label for="end-date">終了日時</label>
+                        <input type="text" id="end-date" placeholder="2026-09-16 10:00">
+                    </div>
+                </div>
+                <div class="form-row checkbox-row">
+                    <label><input type="checkbox" id="all-day"> 終日</label>
+                    <label><input type="checkbox" id="is-active" checked> 表示する</label>
+                </div>
+                <div class="form-row form-row-half">
+                    <div>
+                        <label for="category">区分</label>
+                        <input type="text" id="category" maxlength="100">
+                    </div>
+                    <div>
+                        <label for="location">場所</label>
+                        <input type="text" id="location" maxlength="255">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label for="description">内容</label>
+                    <textarea id="description" rows="4"></textarea>
+                </div>
+                <div class="form-row form-row-narrow">
+                    <label for="sort-order">表示順</label>
+                    <input type="text" id="sort-order" value="0">
+                </div>
+                <div class="editor-actions">
+                    <button type="submit" id="save-event" class="button button-primary">保存</button>
+                    <button type="button" id="delete-event" class="button button-danger" style="display:none;">削除</button>
+                    <button type="button" id="cancel-edit" class="button">取消</button>
+                </div>
+                <p id="csv-readonly-note" class="readonly-note" style="display:none;">試験用CSV接続中は閲覧専用です。登録・更新・削除はSharePoint接続時に使用できます。</p>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/util.js"></script>
+    <script src="js/csv-data-source.js"></script>
+    <script src="js/sharepoint-data-source.js"></script>
+    <script src="js/data-service.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
