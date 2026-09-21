@@ -65,6 +65,12 @@
         byId("csv-readonly-note").style.display = readOnly ? "block" : "none";
     }
 
+    function setEditorLayoutOpen(isOpen) {
+        var className = document.body.className.replace(/(^|\s)editor-open(?=\s|$)/g, " ");
+        className = className.replace(/^\s+|\s+$/g, "").replace(/\s+/g, " ");
+        document.body.className = isOpen ? (className ? className + " editor-open" : "editor-open") : className;
+    }
+
     function updateSourceControls() {
         var mode = service.getMode();
         byId("source-csv").checked = mode === "csv";
@@ -583,9 +589,8 @@
         }
         setEditorReadOnly(readOnly);
         byId("delete-event").style.display = item && !readOnly ? "inline-block" : "none";
-        byId("editor-backdrop").style.display = "block";
         byId("event-editor").style.display = "block";
-        document.body.style.overflow = "hidden";
+        setEditorLayoutOpen(true);
         if (!readOnly) {
             byId("event-name").focus();
         }
@@ -593,9 +598,8 @@
 
     function closeEditor() {
         state.editingItem = null;
-        byId("editor-backdrop").style.display = "none";
         byId("event-editor").style.display = "none";
-        document.body.style.overflow = "";
+        setEditorLayoutOpen(false);
         setMessage("", false);
     }
 
@@ -823,7 +827,6 @@
         util.addEvent(byId("new-event"), "click", function () {
             openEditor(null, state.displayDate);
         });
-        util.addEvent(byId("editor-backdrop"), "click", closeEditor);
         util.addEvent(document, "keydown", function (event) {
             event = event || window.event;
             if (event.keyCode === 27 && byId("event-editor").style.display !== "none") {
