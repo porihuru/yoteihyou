@@ -7,6 +7,14 @@
         rememberDataSource: true,
         storageKey: "yoteihyou.dataSource",
 
+        dailyView: {
+            startHour: 6,
+            endHour: 22,
+            slotMinutes: 60,
+            defaultStartHour: 9,
+            defaultDurationMinutes: 60
+        },
+
         csv: {
             url: "data/schedule.csv"
         },

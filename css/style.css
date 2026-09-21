@@ -326,31 +326,23 @@ body.editor-open .app-shell {
     content: "";
 }
 
-.day-add-button {
-    float: right;
-    min-width: 22px;
-    height: 22px;
-    margin: -3px 0 0 4px;
-    padding: 0 5px;
-    border: 1px solid #7b98ad;
-    border-radius: 2px;
-    background: #f2f7fa;
-    color: #174f7c;
-    font-weight: bold;
-    line-height: 20px;
+.clickable-date,
+.clickable-slot {
     cursor: pointer;
 }
 
-.day-add-button:hover,
-.day-add-button:focus {
-    background: #dfeef7;
+.clickable-date:hover,
+.clickable-slot:hover {
+    background: #f2f8fc;
 }
 
-.day-add-button[disabled] {
-    border-color: #bbb;
-    background: #eee;
-    color: #999;
-    cursor: default;
+.daily-slot {
+    height: 42px;
+}
+
+.empty-slot-hint {
+    color: #8a99a8;
+    font-size: 12px;
 }
 
 .event-item {

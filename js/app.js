@@ -2,6 +2,13 @@
     "use strict";
 
     var config = window.YOTEIHYOU_CONFIG;
+    var dailyViewConfig = config.dailyView || {
+        startHour: 6,
+        endHour: 22,
+        slotMinutes: 60,
+        defaultStartHour: 9,
+        defaultDurationMinutes: 60
+    };
     var organizationConfig = window.YOTEIHYOU_ORGANIZATIONS || {separator: "／", sections: []};
     var util = window.YoteihyouUtil;
     var service = new window.YoteihyouDataService(config);
@@ -140,6 +147,14 @@
         return util.pad2(item.startDate.getHours()) + ":" + util.pad2(item.startDate.getMinutes());
     }
 
+    function stopEvent(event) {
+        event = event || window.event;
+        if (event.stopPropagation) {
+            event.stopPropagation();
+        }
+        event.cancelBubble = true;
+    }
+
     function createEventButton(item, day) {
         var button = document.createElement("button");
         var time = getTimeLabel(item, day);
@@ -158,24 +173,9 @@
         titleSpan = document.createElement("span");
         titleSpan.appendChild(document.createTextNode(item.title));
         button.appendChild(titleSpan);
-        button.onclick = function () {
-            openEditor(item);
-        };
-        return button;
-    }
-
-    function createDayAddButton(day, label) {
-        var button = document.createElement("button");
-        button.type = "button";
-        button.className = "day-add-button screen-only";
-        button.appendChild(document.createTextNode(label || "＋"));
-        button.title = formatJapaneseDate(day, true) + "に予定を追加";
-        button.disabled = service.isReadOnly();
         button.onclick = function (event) {
-            if (event && event.stopPropagation) {
-                event.stopPropagation();
-            }
-            openEditor(null, day);
+            stopEvent(event);
+            openEditor(item);
             return false;
         };
         return button;
@@ -206,7 +206,7 @@
             for (columnIndex = 0; columnIndex < 7; columnIndex += 1) {
                 date = new Date(firstCell.getFullYear(), firstCell.getMonth(), firstCell.getDate() + (rowIndex * 7) + columnIndex);
                 cell = document.createElement("td");
-                cell.className = columnIndex === 0 ? "sunday" : (columnIndex === 6 ? "saturday" : "");
+                cell.className = (columnIndex === 0 ? "sunday" : (columnIndex === 6 ? "saturday" : "")) + " clickable-date";
                 if (date.getMonth() !== month) {
                     cell.className += (cell.className ? " " : "") + "other-month";
                 }
@@ -216,12 +216,16 @@
                 dayNumber = document.createElement("div");
                 dayNumber.className = "day-number";
                 dayNumber.appendChild(document.createTextNode(date.getDate()));
-                dayNumber.appendChild(createDayAddButton(new Date(date.getTime()), "＋"));
                 cell.appendChild(dayNumber);
                 dayItems = getItemsForDay(date, "monthly");
                 for (itemIndex = 0; itemIndex < dayItems.length; itemIndex += 1) {
                     cell.appendChild(createEventButton(dayItems[itemIndex], date));
                 }
+                (function (targetCell, targetDate) {
+                    targetCell.onclick = function () {
+                        openEditor(null, targetDate, false);
+                    };
+                }(cell, new Date(date.getTime())));
                 row.appendChild(cell);
             }
             body.appendChild(row);
@@ -243,8 +247,10 @@
         button.type = "button";
         button.className = "event-detail-button";
         button.appendChild(document.createTextNode(item.title));
-        button.onclick = function () {
+        button.onclick = function (event) {
+            stopEvent(event);
             openEditor(item);
+            return false;
         };
         return button;
     }
@@ -267,40 +273,84 @@
         var body = byId("daily-body");
         var day = state.displayDate;
         var items = getItemsForDay(day, "daily");
+        var slotMinutes = parseInt(dailyViewConfig.slotMinutes, 10) || 60;
+        var rangeStart = (parseInt(dailyViewConfig.startHour, 10) || 0) * 60;
+        var rangeEnd = (parseInt(dailyViewConfig.endHour, 10) || 24) * 60;
+        var itemMinutes;
+        var slotItems;
+        var slotDate;
         var row;
-        var titleCell;
-        var emptyCell;
+        var eventsCell;
+        var eventBox;
+        var meta;
+        var minute;
         var i;
+        var j;
         while (body.firstChild) {
             body.removeChild(body.firstChild);
         }
         byId("month-title").innerHTML = formatJapaneseDate(day, true);
         byId("print-heading").innerHTML = formatJapaneseDate(day, true) + "　日々予定表";
-        row = document.createElement("tr");
-        emptyCell = document.createElement("td");
-        emptyCell.colSpan = 6;
-        emptyCell.className = "screen-only";
-        emptyCell.appendChild(createDayAddButton(new Date(day.getTime()), "＋ この日に予定を追加"));
-        row.appendChild(emptyCell);
-        body.appendChild(row);
-        if (items.length === 0) {
-            row = document.createElement("tr");
-            emptyCell = createTextCell("予定はありません。", "empty-schedule");
-            emptyCell.colSpan = 6;
-            row.appendChild(emptyCell);
-            body.appendChild(row);
-            return;
-        }
+
         for (i = 0; i < items.length; i += 1) {
+            if (sameDate(items[i].startDate, day)) {
+                itemMinutes = items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes();
+                rangeStart = Math.min(rangeStart, Math.floor(itemMinutes / slotMinutes) * slotMinutes);
+                rangeEnd = Math.max(rangeEnd, Math.floor(itemMinutes / slotMinutes) * slotMinutes + slotMinutes);
+            }
+        }
+
+        rangeStart = Math.max(0, rangeStart);
+        rangeEnd = Math.min(24 * 60, rangeEnd);
+        for (minute = rangeStart; minute < rangeEnd; minute += slotMinutes) {
+            slotItems = [];
+            for (i = 0; i < items.length; i += 1) {
+                itemMinutes = sameDate(items[i].startDate, day) ?
+                    items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes() : rangeStart;
+                if (itemMinutes >= minute && itemMinutes < minute + slotMinutes) {
+                    slotItems.push(items[i]);
+                }
+            }
             row = document.createElement("tr");
-            row.appendChild(createTextCell(getDailyTimeRange(items[i], day), "time-column"));
-            titleCell = document.createElement("td");
-            titleCell.appendChild(createEventTitleButton(items[i]));
-            row.appendChild(titleCell);
-            row.appendChild(createTextCell(getOrganizationFromItem(items[i]), ""));
-            row.appendChild(createTextCell(items[i].category, ""));
-            row.appendChild(createTextCell(items[i].location, ""));
-            row.appendChild(createTextCell(items[i].description, ""));
+            row.appendChild(createTextCell(util.pad2(Math.floor(minute / 60)) + ":" + util.pad2(minute % 60), "time-column"));
+            eventsCell = document.createElement("td");
+            eventsCell.className = "daily-slot clickable-slot";
+            eventsCell.title = "この時間に予定を追加";
+            if (slotItems.length === 0) {
+                eventsCell.appendChild((function () {
+                    var hint = document.createElement("span");
+                    hint.className = "empty-slot-hint screen-only";
+                    hint.appendChild(document.createTextNode("空白をクリックして入力"));
+                    return hint;
+                }()));
+            }
+            for (j = 0; j < slotItems.length; j += 1) {
+                eventBox = document.createElement("div");
+                eventBox.className = "weekly-event";
+                eventBox.appendChild(createEventTitleButton(slotItems[j]));
+                meta = getDailyTimeRange(slotItems[j], day);
+                if (getOrganizationFromItem(slotItems[j])) {
+                    meta += "　" + getOrganizationFromItem(slotItems[j]);
+                }
+                if (slotItems[j].location) {
+                    meta += "　" + slotItems[j].location;
+                }
+                eventBox.appendChild(document.createTextNode("　" + meta));
+                (function (box, item) {
+                    box.onclick = function (event) {
+                        stopEvent(event);
+                        openEditor(item);
+                    };
+                }(eventBox, slotItems[j]));
+                eventsCell.appendChild(eventBox);
+            }
+            slotDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(minute / 60), minute % 60, 0, 0);
+            (function (cell, targetDate) {
+                cell.onclick = function () {
+                    openEditor(null, targetDate, true);
+                };
+            }(eventsCell, slotDate));
+            row.appendChild(eventsCell);
             body.appendChild(row);
         }
     }
@@ -331,10 +381,9 @@
             items = getItemsForDay(day, "weekly");
             row = document.createElement("tr");
             dateCell = createTextCell(formatJapaneseDate(day, false), "weekly-date");
-            dateCell.appendChild(document.createElement("br"));
-            dateCell.appendChild(createDayAddButton(new Date(day.getTime()), "＋入力"));
             eventsCell = document.createElement("td");
-            eventsCell.className = "weekly-events";
+            eventsCell.className = "weekly-events clickable-date";
+            eventsCell.title = formatJapaneseDate(day, true) + "に予定を追加";
             if (items.length === 0) {
                 eventsCell.appendChild(document.createTextNode("予定なし"));
                 eventsCell.className += " empty-schedule";
@@ -359,8 +408,19 @@
                         return span;
                     }(meta)));
                 }
+                (function (box, item) {
+                    box.onclick = function (event) {
+                        stopEvent(event);
+                        openEditor(item);
+                    };
+                }(eventBox, items[j]));
                 eventsCell.appendChild(eventBox);
             }
+            (function (cell, targetDate) {
+                cell.onclick = function () {
+                    openEditor(null, targetDate, false);
+                };
+            }(eventsCell, new Date(day.getTime())));
             row.appendChild(dateCell);
             row.appendChild(eventsCell);
             body.appendChild(row);
@@ -550,12 +610,18 @@
         byId("target-monthly").checked = targets.indexOf("monthly") >= 0;
     }
 
-    function clearEditor(selectedDate) {
-        var date = selectedDate ? startOfDay(selectedDate) : startOfDay(state.displayDate || new Date());
+    function clearEditor(selectedDate, useSelectedTime) {
+        var date = selectedDate ? new Date(selectedDate.getTime()) : startOfDay(state.displayDate || new Date());
+        var durationMinutes = parseInt(dailyViewConfig.defaultDurationMinutes, 10) || 60;
+        var endDate;
+        if (!useSelectedTime) {
+            date.setHours(parseInt(dailyViewConfig.defaultStartHour, 10) || 9, 0, 0, 0);
+        }
+        endDate = new Date(date.getTime() + durationMinutes * 60000);
         byId("event-id").value = "";
         byId("event-name").value = "";
-        byId("start-date").value = util.formatDateKey(date) + " 09:00";
-        byId("end-date").value = util.formatDateKey(date) + " 10:00";
+        byId("start-date").value = util.formatDateTime(date);
+        byId("end-date").value = util.formatDateTime(endDate);
         setSelectedTargets(getAllTargetKeys());
         loadOrganizationSections("", "");
         byId("category").value = "";
@@ -563,7 +629,7 @@
         byId("description").value = "";
     }
 
-    function openEditor(item, selectedDate) {
+    function openEditor(item, selectedDate, useSelectedTime) {
         var readOnly = service.isReadOnly();
         var purpose;
         if (!item && readOnly) {
@@ -571,7 +637,7 @@
             return;
         }
         state.editingItem = item || null;
-        clearEditor(selectedDate);
+        clearEditor(selectedDate, useSelectedTime === true);
         if (item) {
             byId("editor-title").innerHTML = readOnly ? "予定の詳細" : "予定を編集";
             byId("event-id").value = item.id;
