@@ -15,6 +15,11 @@
             defaultDurationMinutes: 60
         },
 
+        print: {
+            marginMm: 10,
+            minimumScale: 0.65
+        },
+
         csv: {
             url: "data/schedule.csv"
         },

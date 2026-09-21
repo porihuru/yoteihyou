@@ -9,6 +9,7 @@
         defaultStartHour: 9,
         defaultDurationMinutes: 60
     };
+    var printConfig = config.print || {marginMm: 10, minimumScale: 0.65};
     var organizationConfig = window.YOTEIHYOU_ORGANIZATIONS || {separator: "／", sections: []};
     var util = window.YoteihyouUtil;
     var service = new window.YoteihyouDataService(config);
@@ -19,6 +20,7 @@
         items: [],
         editingItem: null
     };
+    var printState = null;
 
     function byId(id) {
         return document.getElementById(id);
@@ -787,12 +789,105 @@
     function updatePrintPageStyle() {
         var style = byId("print-page-style");
         var size = state.viewMode === "monthly" ? "A3 landscape" : "A4 portrait";
-        var cssText = "@media print { @page { size: " + size + "; margin: 10mm; } }";
+        var margin = parseFloat(printConfig.marginMm) || 10;
+        var cssText = "@media print { @page { size: " + size + "; margin: " + margin + "mm; } }";
         if (style.styleSheet) {
             style.styleSheet.cssText = cssText;
         } else {
             style.innerHTML = cssText;
         }
+    }
+
+    function getActiveViewElement() {
+        if (state.viewMode === "daily") {
+            return byId("daily-view");
+        }
+        if (state.viewMode === "weekly") {
+            return byId("weekly-view");
+        }
+        return byId("monthly-view");
+    }
+
+    function resetPrintLayout() {
+        var i;
+        if (!printState) {
+            return;
+        }
+        printState.area.style.width = printState.areaWidth;
+        printState.area.style.zoom = printState.areaZoom;
+        if (printState.calendar) {
+            printState.calendar.style.minWidth = printState.calendarMinWidth;
+        }
+        for (i = 0; i < printState.screenOnly.length; i += 1) {
+            printState.screenOnly[i].element.style.display = printState.screenOnly[i].display;
+        }
+        printState = null;
+    }
+
+    function preparePrintLayout() {
+        var area = byId("print-area");
+        var activeView = getActiveViewElement();
+        var calendar = activeView.getElementsByTagName("table")[0];
+        var screenOnlyElements = activeView.getElementsByClassName("screen-only");
+        var screenOnly = [];
+        var pageWidthMm = state.viewMode === "monthly" ? 420 : 210;
+        var pageHeightMm = 297;
+        var marginMm = parseFloat(printConfig.marginMm) || 10;
+        var pixelsPerMm = 96 / 25.4;
+        var availableWidth = (pageWidthMm - marginMm * 2) * pixelsPerMm * 0.98;
+        var availableHeight = (pageHeightMm - marginMm * 2) * pixelsPerMm * 0.98;
+        var contentWidth;
+        var contentHeight;
+        var requiredScale;
+        var minimumScale = parseFloat(printConfig.minimumScale) || 0.65;
+        var i;
+
+        resetPrintLayout();
+        printState = {
+            area: area,
+            areaWidth: area.style.width,
+            areaZoom: area.style.zoom,
+            calendar: calendar,
+            calendarMinWidth: calendar ? calendar.style.minWidth : "",
+            screenOnly: screenOnly
+        };
+
+        for (i = 0; i < screenOnlyElements.length; i += 1) {
+            screenOnly.push({element: screenOnlyElements[i], display: screenOnlyElements[i].style.display});
+            screenOnlyElements[i].style.display = "none";
+        }
+        area.style.zoom = "1";
+        area.style.width = Math.floor(availableWidth) + "px";
+        if (calendar) {
+            calendar.style.minWidth = "0";
+        }
+
+        contentWidth = Math.max(activeView.scrollWidth, area.scrollWidth);
+        contentHeight = activeView.scrollHeight + 60;
+        requiredScale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight) * 0.98;
+
+        if (requiredScale < minimumScale) {
+            resetPrintLayout();
+            window.alert(
+                "予定が多いため、1枚に収まりません。\n" +
+                "1枚に収めるには約" + Math.floor(requiredScale * 100) + "%まで縮小する必要があります。\n" +
+                "表示する予定を減らすか、内容を短くしてから印刷してください。"
+            );
+            return false;
+        }
+
+        area.style.zoom = String(Math.floor(requiredScale * 100) / 100);
+        return true;
+    }
+
+    function printCurrentView() {
+        closeEditor();
+        updatePrintPageStyle();
+        if (!preparePrintLayout()) {
+            return;
+        }
+        window.print();
+        window.setTimeout(resetPrintLayout, 0);
     }
 
     function updateViewControls() {
@@ -887,18 +982,26 @@
             moveView(1);
         });
         util.addEvent(byId("print-view"), "click", function () {
-            updatePrintPageStyle();
-            window.print();
+            printCurrentView();
         });
         util.addEvent(byId("new-event"), "click", function () {
             openEditor(null, state.displayDate);
         });
         util.addEvent(document, "keydown", function (event) {
             event = event || window.event;
+            if (event.ctrlKey && event.keyCode === 80) {
+                if (event.preventDefault) {
+                    event.preventDefault();
+                }
+                event.returnValue = false;
+                printCurrentView();
+                return false;
+            }
             if (event.keyCode === 27 && byId("event-editor").style.display !== "none") {
                 closeEditor();
             }
         });
+        util.addEvent(window, "afterprint", resetPrintLayout);
         util.addEvent(byId("cancel-edit"), "click", closeEditor);
         util.addEvent(byId("delete-event"), "click", deleteEvent);
         util.addEvent(byId("event-form"), "submit", saveEvent);

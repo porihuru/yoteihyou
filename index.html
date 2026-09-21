@@ -37,9 +37,10 @@
             <button type="button" id="new-event" class="button button-primary toolbar-right">予定を追加</button>
         </div>
 
-        <div id="print-heading" class="print-heading"></div>
+        <div id="print-area" class="print-area">
+            <div id="print-heading" class="print-heading"></div>
 
-        <div id="monthly-view" class="calendar-wrap schedule-view">
+            <div id="monthly-view" class="calendar-wrap schedule-view">
             <table class="calendar" aria-label="月間予定表">
                 <thead>
                     <tr>
@@ -54,9 +55,9 @@
                 </thead>
                 <tbody id="calendar-body"></tbody>
             </table>
-        </div>
+            </div>
 
-        <div id="weekly-view" class="list-view schedule-view" style="display:none;">
+            <div id="weekly-view" class="list-view schedule-view" style="display:none;">
             <table class="schedule-list" aria-label="週間予定表">
                 <thead>
                     <tr>
@@ -66,9 +67,9 @@
                 </thead>
                 <tbody id="weekly-body"></tbody>
             </table>
-        </div>
+            </div>
 
-        <div id="daily-view" class="list-view schedule-view" style="display:none;">
+            <div id="daily-view" class="list-view schedule-view" style="display:none;">
             <table class="schedule-list daily-list" aria-label="日々予定表">
                 <thead>
                     <tr>
@@ -78,6 +79,7 @@
                 </thead>
                 <tbody id="daily-body"></tbody>
             </table>
+            </div>
         </div>
 
         <div id="event-editor" class="editor-panel" role="region" aria-labelledby="editor-title" style="display:none;">
