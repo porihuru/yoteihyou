@@ -41,7 +41,7 @@
                 name: "GP4班",
                 teams: [
                     {name: "KY班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2},
-                    {name: "KY班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2},
+                    {name: "KY2班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2},
                     {name: "QY班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2}
                 ]
             },
