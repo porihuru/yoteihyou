@@ -158,6 +158,23 @@
         return button;
     }
 
+    function createDayAddButton(day, label) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.className = "day-add-button screen-only";
+        button.appendChild(document.createTextNode(label || "＋"));
+        button.title = formatJapaneseDate(day, true) + "に予定を追加";
+        button.disabled = service.isReadOnly();
+        button.onclick = function (event) {
+            if (event && event.stopPropagation) {
+                event.stopPropagation();
+            }
+            openEditor(null, day);
+            return false;
+        };
+        return button;
+    }
+
     function renderCalendar() {
         var body = byId("calendar-body");
         var year = state.displayMonth.getFullYear();
@@ -193,6 +210,7 @@
                 dayNumber = document.createElement("div");
                 dayNumber.className = "day-number";
                 dayNumber.appendChild(document.createTextNode(date.getDate()));
+                dayNumber.appendChild(createDayAddButton(new Date(date.getTime()), "＋"));
                 cell.appendChild(dayNumber);
                 dayItems = getItemsForDay(date, "monthly");
                 for (itemIndex = 0; itemIndex < dayItems.length; itemIndex += 1) {
@@ -252,6 +270,13 @@
         }
         byId("month-title").innerHTML = formatJapaneseDate(day, true);
         byId("print-heading").innerHTML = formatJapaneseDate(day, true) + "　日々予定表";
+        row = document.createElement("tr");
+        emptyCell = document.createElement("td");
+        emptyCell.colSpan = 6;
+        emptyCell.className = "screen-only";
+        emptyCell.appendChild(createDayAddButton(new Date(day.getTime()), "＋ この日に予定を追加"));
+        row.appendChild(emptyCell);
+        body.appendChild(row);
         if (items.length === 0) {
             row = document.createElement("tr");
             emptyCell = createTextCell("予定はありません。", "empty-schedule");
@@ -300,6 +325,8 @@
             items = getItemsForDay(day, "weekly");
             row = document.createElement("tr");
             dateCell = createTextCell(formatJapaneseDate(day, false), "weekly-date");
+            dateCell.appendChild(document.createElement("br"));
+            dateCell.appendChild(createDayAddButton(new Date(day.getTime()), "＋入力"));
             eventsCell = document.createElement("td");
             eventsCell.className = "weekly-events";
             if (items.length === 0) {
@@ -517,11 +544,12 @@
         byId("target-monthly").checked = targets.indexOf("monthly") >= 0;
     }
 
-    function clearEditor() {
+    function clearEditor(selectedDate) {
+        var date = selectedDate ? startOfDay(selectedDate) : startOfDay(state.displayDate || new Date());
         byId("event-id").value = "";
         byId("event-name").value = "";
-        byId("start-date").value = util.formatDateKey(new Date()) + " 09:00";
-        byId("end-date").value = util.formatDateKey(new Date()) + " 10:00";
+        byId("start-date").value = util.formatDateKey(date) + " 09:00";
+        byId("end-date").value = util.formatDateKey(date) + " 10:00";
         setSelectedTargets(getAllTargetKeys());
         loadOrganizationSections("", "");
         byId("category").value = "";
@@ -529,11 +557,15 @@
         byId("description").value = "";
     }
 
-    function openEditor(item) {
+    function openEditor(item, selectedDate) {
         var readOnly = service.isReadOnly();
         var purpose;
+        if (!item && readOnly) {
+            setMessage("試験用CSVは閲覧専用です。新規入力はSharePointへ切り替えてください。", true);
+            return;
+        }
         state.editingItem = item || null;
-        clearEditor();
+        clearEditor(selectedDate);
         if (item) {
             byId("editor-title").innerHTML = readOnly ? "予定の詳細" : "予定を編集";
             byId("event-id").value = item.id;
@@ -551,7 +583,9 @@
         }
         setEditorReadOnly(readOnly);
         byId("delete-event").style.display = item && !readOnly ? "inline-block" : "none";
+        byId("editor-backdrop").style.display = "block";
         byId("event-editor").style.display = "block";
+        document.body.style.overflow = "hidden";
         if (!readOnly) {
             byId("event-name").focus();
         }
@@ -559,7 +593,9 @@
 
     function closeEditor() {
         state.editingItem = null;
+        byId("editor-backdrop").style.display = "none";
         byId("event-editor").style.display = "none";
+        document.body.style.overflow = "";
         setMessage("", false);
     }
 
@@ -785,7 +821,14 @@
             window.print();
         });
         util.addEvent(byId("new-event"), "click", function () {
-            openEditor(null);
+            openEditor(null, state.displayDate);
+        });
+        util.addEvent(byId("editor-backdrop"), "click", closeEditor);
+        util.addEvent(document, "keydown", function (event) {
+            event = event || window.event;
+            if (event.keyCode === 27 && byId("event-editor").style.display !== "none") {
+                closeEditor();
+            }
         });
         util.addEvent(byId("cancel-edit"), "click", closeEditor);
         util.addEvent(byId("delete-event"), "click", deleteEvent);

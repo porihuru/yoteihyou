@@ -313,6 +313,39 @@ textarea {
     font-weight: bold;
 }
 
+.day-number:after {
+    display: block;
+    clear: both;
+    content: "";
+}
+
+.day-add-button {
+    float: right;
+    min-width: 22px;
+    height: 22px;
+    margin: -3px 0 0 4px;
+    padding: 0 5px;
+    border: 1px solid #7b98ad;
+    border-radius: 2px;
+    background: #f2f7fa;
+    color: #174f7c;
+    font-weight: bold;
+    line-height: 20px;
+    cursor: pointer;
+}
+
+.day-add-button:hover,
+.day-add-button:focus {
+    background: #dfeef7;
+}
+
+.day-add-button[disabled] {
+    border-color: #bbb;
+    background: #eee;
+    color: #999;
+    cursor: default;
+}
+
 .event-item {
     display: block;
     width: 100%;
@@ -335,10 +368,33 @@ textarea {
 }
 
 .editor-panel {
-    margin-top: 14px;
+    position: fixed;
+    z-index: 1001;
+    top: 50%;
+    left: 50%;
+    width: 720px;
+    max-width: 92%;
+    max-height: 90%;
+    margin: 0;
     padding: 18px;
     border: 1px solid #9aaaba;
     background: #fff;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+    overflow-y: auto;
+    -ms-transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
+}
+
+.editor-backdrop {
+    position: fixed;
+    z-index: 1000;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: #000;
+    filter: alpha(opacity=45);
+    opacity: 0.45;
 }
 
 .editor-panel h2 {
@@ -426,6 +482,12 @@ textarea {
         width: 100%;
         margin: 0 0 13px;
     }
+
+    .editor-panel {
+        width: 94%;
+        max-height: 94%;
+        padding: 13px;
+    }
 }
 
 @media print {
@@ -446,6 +508,11 @@ textarea {
     .toolbar,
     .message,
     .editor-panel {
+        display: none !important;
+    }
+
+    .editor-backdrop,
+    .screen-only {
         display: none !important;
     }
 

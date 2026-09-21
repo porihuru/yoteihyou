@@ -84,7 +84,8 @@
             </table>
         </div>
 
-        <div id="event-editor" class="editor-panel" style="display:none;">
+        <div id="editor-backdrop" class="editor-backdrop" style="display:none;"></div>
+        <div id="event-editor" class="editor-panel" role="dialog" aria-modal="true" aria-labelledby="editor-title" style="display:none;">
             <h2 id="editor-title">予定を追加</h2>
             <form id="event-form">
                 <input type="hidden" id="event-id" value="">
