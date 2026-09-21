@@ -557,13 +557,6 @@ body.editor-open .app-shell {
         padding: 2mm;
     }
 
-    .event-item,
-    .event-detail-button,
-    .event-meta,
-    .weekly-event {
-        font-size: 8pt;
-    }
-
     .event-item {
         padding: 1mm;
         border-color: #777;
