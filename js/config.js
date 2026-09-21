@@ -23,7 +23,8 @@
                 endDate: "EndDate",
                 category: "Category",
                 location: "Location",
-                description: "Description"
+                description: "Description",
+                purpose: "Purpose"
             }
         }
     };

@@ -2,6 +2,7 @@
     "use strict";
 
     var config = window.YOTEIHYOU_CONFIG;
+    var organizationConfig = window.YOTEIHYOU_ORGANIZATIONS || {separator: "／", sections: []};
     var util = window.YoteihyouUtil;
     var service = new window.YoteihyouDataService(config);
     var state = {
@@ -127,7 +128,8 @@
         var titleSpan;
         button.type = "button";
         button.className = "event-item";
-        button.title = item.title + (item.location ? " / " + item.location : "");
+        button.title = item.title + (item.purpose ? " / " + item.purpose : "") +
+            (item.location ? " / " + item.location : "");
         if (time) {
             timeSpan = document.createElement("span");
             timeSpan.className = "event-time";
@@ -199,11 +201,89 @@
         return null;
     }
 
+    function clearOptions(selectElement) {
+        while (selectElement.options.length > 0) {
+            selectElement.remove(0);
+        }
+    }
+
+    function addOption(selectElement, text, value) {
+        var option = document.createElement("option");
+        option.text = text;
+        option.value = value;
+        selectElement.add(option);
+    }
+
+    function findOrganizationSection(sectionName) {
+        var sections = organizationConfig.sections || [];
+        var i;
+        for (i = 0; i < sections.length; i += 1) {
+            if (sections[i].name === sectionName) {
+                return sections[i];
+            }
+        }
+        return null;
+    }
+
+    function loadOrganizationTeams(sectionName, selectedTeam) {
+        var teamSelect = byId("organization-team");
+        var section = findOrganizationSection(sectionName);
+        var teams = section && section.teams ? section.teams : [];
+        var i;
+        clearOptions(teamSelect);
+        addOption(teamSelect, "班を選択", "");
+        for (i = 0; i < teams.length; i += 1) {
+            addOption(teamSelect, teams[i], teams[i]);
+        }
+        if (selectedTeam && teams.indexOf(selectedTeam) < 0) {
+            addOption(teamSelect, "設定外：" + selectedTeam, selectedTeam);
+        }
+        teamSelect.value = selectedTeam || "";
+    }
+
+    function loadOrganizationSections(selectedSection, selectedTeam) {
+        var sectionSelect = byId("organization-section");
+        var sections = organizationConfig.sections || [];
+        var i;
+        clearOptions(sectionSelect);
+        addOption(sectionSelect, "科を選択", "");
+        for (i = 0; i < sections.length; i += 1) {
+            addOption(sectionSelect, sections[i].name, sections[i].name);
+        }
+        if (selectedSection && !findOrganizationSection(selectedSection)) {
+            addOption(sectionSelect, "設定外：" + selectedSection, selectedSection);
+        }
+        sectionSelect.value = selectedSection || "";
+        loadOrganizationTeams(sectionSelect.value, selectedTeam || "");
+    }
+
+    function splitOrganization(value) {
+        var separator = organizationConfig.separator || "／";
+        var text = util.trim(value);
+        var position = text.indexOf(separator);
+        if (position < 0) {
+            return {section: text, team: ""};
+        }
+        return {
+            section: util.trim(text.substring(0, position)),
+            team: util.trim(text.substring(position + separator.length))
+        };
+    }
+
+    function joinOrganization(section, team) {
+        var separator = organizationConfig.separator || "／";
+        if (!section) {
+            return "";
+        }
+        return team ? section + separator + team : section;
+    }
+
     function clearEditor() {
         byId("event-id").value = "";
         byId("event-name").value = "";
         byId("start-date").value = util.formatDateKey(new Date()) + " 09:00";
         byId("end-date").value = util.formatDateKey(new Date()) + " 10:00";
+        loadOrganizationSections("", "");
         byId("category").value = "";
         byId("location").value = "";
         byId("description").value = "";
@@ -211,6 +291,7 @@
 
     function openEditor(item) {
         var readOnly = service.isReadOnly();
+        var organization;
         state.editingItem = item || null;
         clearEditor();
         if (item) {
@@ -219,6 +300,8 @@
             byId("event-name").value = item.title;
             byId("start-date").value = util.formatDateTime(item.startDate);
             byId("end-date").value = util.formatDateTime(item.endDate);
+            organization = splitOrganization(item.purpose || "");
+            loadOrganizationSections(organization.section, organization.team);
             byId("category").value = item.category;
             byId("location").value = item.location;
             byId("description").value = item.description;
@@ -264,6 +347,10 @@
             category: util.trim(byId("category").value),
             location: util.trim(byId("location").value),
             description: util.trim(byId("description").value),
+            purpose: joinOrganization(
+                util.trim(byId("organization-section").value),
+                util.trim(byId("organization-team").value)
+            ),
             sortOrder: 0,
             isActive: true,
             source: "sharepoint"
@@ -361,6 +448,9 @@
                 switchMode("sharepoint");
             }
         });
+        util.addEvent(byId("organization-section"), "change", function () {
+            loadOrganizationTeams(this.value, "");
+        });
         util.addEvent(byId("reload-button"), "click", function () {
             reloadData("");
         });
@@ -386,6 +476,7 @@
         var mode = getStoredMode() || config.defaultDataSource;
         byId("app-title").innerHTML = util.escapeHtml(config.appTitle);
         document.title = config.appTitle;
+        loadOrganizationSections("", "");
         service.setMode(mode);
         updateSourceControls();
         bindEvents();

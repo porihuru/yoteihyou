@@ -23,8 +23,27 @@ Edge 95 と Internet Explorer 11（IEモードを含む）で動作する、Shar
 | 分類 | `Category` |
 | 場所 | `Location` |
 | 説明 | `Description` |
+| 目的（入力グループ保存先） | `Purpose` |
 
-`ID` は既存の標準列を使用します。バナーURL、位置情報、空き時間情報、重複予約のチェック、出席者、設備、目的、登録・更新情報など、アプリで使用しない列は変更しません。
+`ID` は既存の標準列を使用します。入力グループは `科／班` の形式で「目的」列へ保存します。バナーURL、位置情報、空き時間情報、重複予約のチェック、出席者、設備、登録・更新情報など、アプリで使用しない列は変更しません。
+
+## 組織設定
+
+組織は `config/organizations.js` から読み込みます。画面では「科」を選ぶと、設定された「班」だけが次の選択欄へ表示されます。
+
+```javascript
+window.YOTEIHYOU_ORGANIZATIONS = {
+    separator: "／",
+    sections: [
+        {
+            name: "総務科",
+            teams: ["総務班", "人事班", "情報班"]
+        }
+    ]
+};
+```
+
+科を追加する場合は、`sections` 内へ同じ形式で追記します。既存予定に設定ファイル外の組織名が保存されている場合は、「設定外」と表示して値を保持します。
 
 ## 設定
 
@@ -46,7 +65,7 @@ sharePoint: {
 `data/schedule.csv` の列構成は次のとおりです。
 
 ```text
-ID,Title,EventDate,EndDate,Category,Location,Description
+ID,Title,EventDate,EndDate,Category,Location,Description,Purpose
 ```
 
 - 文字コード: UTF-8（BOMあり・なしの両方に対応）

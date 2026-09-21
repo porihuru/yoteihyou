@@ -260,10 +260,12 @@ textarea {
 }
 
 .form-row input[type="text"],
+.form-row select,
 .form-row textarea {
     width: 100%;
     padding: 7px 8px;
     border: 1px solid #9aaaba;
+    background: #fff;
 }
 
 .form-row-half:after {

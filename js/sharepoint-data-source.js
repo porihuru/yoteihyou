@@ -85,6 +85,7 @@
             category: row[f.category] || "",
             location: row[f.location] || "",
             description: row[f.description] || "",
+            purpose: row[f.purpose] || "",
             sortOrder: 0,
             isActive: true,
             source: "sharepoint"
@@ -94,7 +95,7 @@
     SharePointDataSource.prototype.load = function (success, failure) {
         var self = this;
         var f = this.fields;
-        var select = [f.id, f.title, f.startDate, f.endDate, f.category, f.location, f.description].join(",");
+        var select = [f.id, f.title, f.startDate, f.endDate, f.category, f.location, f.description, f.purpose].join(",");
         var url;
         var items = [];
 
@@ -175,6 +176,7 @@
         payload[f.category] = item.category || "";
         payload[f.location] = item.location || "";
         payload[f.description] = item.description || "";
+        payload[f.purpose] = item.purpose || "";
         return payload;
     };
 

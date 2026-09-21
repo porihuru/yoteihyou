@@ -75,6 +75,7 @@
             category: util.trim(source.Category),
             location: util.trim(source.Location),
             description: util.trim(source.Description),
+            purpose: util.trim(source.Purpose),
             sortOrder: 0,
             isActive: true,
             source: "csv"
