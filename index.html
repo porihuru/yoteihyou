@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>予定表</title>
     <link rel="stylesheet" href="css/style.css">
+    <style id="print-page-style" type="text/css"></style>
 </head>
 <body>
     <div id="app" class="app-shell">
@@ -23,14 +24,22 @@
         <div id="message" class="message" aria-live="polite"></div>
 
         <div class="toolbar">
+            <span class="view-switch">
+                <button type="button" id="view-daily" class="button">日々</button>
+                <button type="button" id="view-weekly" class="button">週間</button>
+                <button type="button" id="view-monthly" class="button">月間</button>
+            </span>
             <button type="button" id="previous-month" class="button">前月</button>
             <button type="button" id="current-month" class="button">今月</button>
             <button type="button" id="next-month" class="button">翌月</button>
             <span id="month-title" class="month-title"></span>
+            <button type="button" id="print-view" class="button toolbar-right">印刷</button>
             <button type="button" id="new-event" class="button button-primary toolbar-right">予定を追加</button>
         </div>
 
-        <div class="calendar-wrap">
+        <div id="print-heading" class="print-heading"></div>
+
+        <div id="monthly-view" class="calendar-wrap schedule-view">
             <table class="calendar" aria-label="月間予定表">
                 <thead>
                     <tr>
@@ -44,6 +53,34 @@
                     </tr>
                 </thead>
                 <tbody id="calendar-body"></tbody>
+            </table>
+        </div>
+
+        <div id="weekly-view" class="list-view schedule-view" style="display:none;">
+            <table class="schedule-list" aria-label="週間予定表">
+                <thead>
+                    <tr>
+                        <th class="date-column">日付</th>
+                        <th>予定</th>
+                    </tr>
+                </thead>
+                <tbody id="weekly-body"></tbody>
+            </table>
+        </div>
+
+        <div id="daily-view" class="list-view schedule-view" style="display:none;">
+            <table class="schedule-list daily-list" aria-label="日々予定表">
+                <thead>
+                    <tr>
+                        <th class="time-column">時刻</th>
+                        <th>件名</th>
+                        <th>入力グループ</th>
+                        <th>区分</th>
+                        <th>場所</th>
+                        <th>内容</th>
+                    </tr>
+                </thead>
+                <tbody id="daily-body"></tbody>
             </table>
         </div>
 
@@ -64,6 +101,12 @@
                         <label for="end-date">終了日時</label>
                         <input type="text" id="end-date" placeholder="2026-09-16 10:00">
                     </div>
+                </div>
+                <div class="form-row checkbox-row output-targets">
+                    <span class="form-label">反映先 <span class="required">必須</span></span>
+                    <label><input type="checkbox" id="target-daily" checked> 日々</label>
+                    <label><input type="checkbox" id="target-weekly" checked> 週間</label>
+                    <label><input type="checkbox" id="target-monthly" checked> 月間</label>
                 </div>
                 <div class="form-row form-row-half">
                     <div>

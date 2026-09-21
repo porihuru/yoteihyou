@@ -3,6 +3,8 @@
 
     window.YOTEIHYOU_ORGANIZATIONS = {
         separator: "／",
+        metadataSeparator: "｜",
+        targetSeparator: "・",
         sections: [
             {
                 name: "総務科",
