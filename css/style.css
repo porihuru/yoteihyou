@@ -364,6 +364,64 @@ body.editor-open .app-shell {
     cursor: pointer;
 }
 
+.organization-schedule {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.monthly-schedule {
+    min-width: 1600px;
+    table-layout: fixed;
+}
+
+.weekly-schedule,
+.daily-list {
+    table-layout: fixed;
+}
+
+.organization-schedule th,
+.organization-schedule td {
+    height: 14px;
+    padding: 0;
+    line-height: 14px;
+    vertical-align: middle;
+}
+
+.organization-schedule thead th {
+    height: 30px;
+    padding: 2px;
+    line-height: 1.2;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.organization-schedule .organization-column,
+.organization-schedule .organization-name {
+    width: 155px;
+}
+
+.organization-schedule .organization-name {
+    padding: 2px 5px;
+    background: #eef2f5;
+    font-weight: bold;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.organization-schedule-cell {
+    overflow: hidden;
+    background: #fff;
+}
+
+.organization-schedule .event-item {
+    height: 14px;
+    margin: 0;
+    padding: 0 2px;
+    border: 0;
+    border-radius: 0;
+    line-height: 14px;
+}
+
 .event-time {
     margin-right: 4px;
     font-weight: bold;
@@ -550,11 +608,6 @@ body.editor-open .app-shell {
     .schedule-list th,
     .schedule-list td {
         border-color: #666;
-    }
-
-    .calendar td {
-        height: 28mm;
-        padding: 2mm;
     }
 
     .event-item {

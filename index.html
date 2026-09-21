@@ -41,42 +41,22 @@
             <div id="print-heading" class="print-heading"></div>
 
             <div id="monthly-view" class="calendar-wrap schedule-view">
-            <table class="calendar" aria-label="月間予定表">
-                <thead>
-                    <tr>
-                        <th class="sunday">日</th>
-                        <th>月</th>
-                        <th>火</th>
-                        <th>水</th>
-                        <th>木</th>
-                        <th>金</th>
-                        <th class="saturday">土</th>
-                    </tr>
-                </thead>
+            <table class="calendar organization-schedule monthly-schedule" aria-label="月間予定表">
+                <thead id="monthly-head"></thead>
                 <tbody id="calendar-body"></tbody>
             </table>
             </div>
 
             <div id="weekly-view" class="list-view schedule-view" style="display:none;">
-            <table class="schedule-list" aria-label="週間予定表">
-                <thead>
-                    <tr>
-                        <th class="date-column">日付</th>
-                        <th>予定</th>
-                    </tr>
-                </thead>
+            <table class="schedule-list organization-schedule weekly-schedule" aria-label="週間予定表">
+                <thead id="weekly-head"></thead>
                 <tbody id="weekly-body"></tbody>
             </table>
             </div>
 
             <div id="daily-view" class="list-view schedule-view" style="display:none;">
-            <table class="schedule-list daily-list" aria-label="日々予定表">
-                <thead>
-                    <tr>
-                        <th class="time-column">時刻</th>
-                        <th>予定（空白の時間帯をクリックして入力）</th>
-                    </tr>
-                </thead>
+            <table class="schedule-list organization-schedule daily-list" aria-label="日々予定表">
+                <thead id="daily-head"></thead>
                 <tbody id="daily-body"></tbody>
             </table>
             </div>
@@ -108,11 +88,11 @@
                 </div>
                 <div class="form-row form-row-half">
                     <div>
-                        <label for="organization-section">科</label>
+                        <label for="organization-section">大グループ</label>
                         <select id="organization-section"></select>
                     </div>
                     <div>
-                        <label for="organization-team">班</label>
+                        <label for="organization-team">小グループ</label>
                         <select id="organization-team"></select>
                     </div>
                 </div>
