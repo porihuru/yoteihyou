@@ -463,6 +463,7 @@ body.editor-open .app-shell {
 }
 
 .form-row input[type="text"],
+.form-row input[type="number"],
 .form-row select,
 .form-row textarea {
     width: 100%;
@@ -518,6 +519,116 @@ body.editor-open .app-shell {
     background: #fff8d7;
 }
 
+.settings-panel {
+    position: fixed;
+    z-index: 1100;
+    top: 3%;
+    right: 3%;
+    bottom: 3%;
+    left: 3%;
+    padding: 18px;
+    border: 2px solid #71869a;
+    background: #fff;
+    box-shadow: 0 5px 24px rgba(0, 0, 0, 0.3);
+    overflow-y: auto;
+}
+
+.settings-header h2 {
+    display: inline-block;
+    margin: 0;
+    color: #174f7c;
+}
+
+.settings-header .button {
+    float: right;
+}
+
+.settings-header:after,
+.settings-number-row:after {
+    display: block;
+    clear: both;
+    content: "";
+}
+
+.settings-status {
+    margin: 12px 0;
+    padding: 9px 12px;
+    border: 1px solid #54855a;
+    background: #e7f3e8;
+    color: #235a2a;
+}
+
+.settings-status.error {
+    border-color: #a94b4b;
+    background: #fbe9e9;
+    color: #8a1f1f;
+}
+
+.settings-actions {
+    margin-bottom: 10px;
+}
+
+.settings-table-wrap {
+    max-height: 42%;
+    overflow: auto;
+    border: 1px solid #9aaaba;
+}
+
+.settings-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.settings-table th,
+.settings-table td {
+    padding: 6px 8px;
+    border: 1px solid #c5cdd5;
+    text-align: left;
+}
+
+.settings-table th {
+    background: #e8edf2;
+    white-space: nowrap;
+}
+
+.settings-inactive td {
+    background: #f1f1f1;
+    color: #777;
+}
+
+.settings-form {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #b8c5d1;
+}
+
+.settings-form h3 {
+    margin: 0 0 12px;
+    color: #174f7c;
+}
+
+.settings-number-row > div {
+    float: left;
+    width: 23.5%;
+    margin-right: 2%;
+}
+
+.settings-number-row > div:last-child {
+    margin-right: 0;
+}
+
+.settings-number-row label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+.settings-number-row input {
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid #9aaaba;
+}
+
 @media screen and (max-width: 760px) {
     .app-header h1,
     .source-switch,
@@ -541,6 +652,12 @@ body.editor-open .app-shell {
     .editor-panel {
         width: 25%;
         padding: 10px;
+    }
+
+    .settings-number-row > div {
+        float: none;
+        width: 100%;
+        margin: 0 0 10px;
     }
 }
 
@@ -567,7 +684,8 @@ body.editor-open .app-shell {
     .app-header,
     .toolbar,
     .message,
-    .editor-panel {
+    .editor-panel,
+    .settings-panel {
         display: none !important;
     }
 

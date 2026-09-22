@@ -29,6 +29,21 @@
             siteUrl: "",
             listTitle: "予定表",
             pageSize: 500,
+            organizationSettings: {
+                enabled: true,
+                listTitle: "予定表組織設定",
+                pageSize: 500,
+                fields: {
+                    id: "ID",
+                    groupName: "Title",
+                    teamName: "TeamName",
+                    monthlyRows: "MonthlyRows",
+                    weeklyRows: "WeeklyRows",
+                    dailyRows: "DailyRows",
+                    sortOrder: "SortOrder",
+                    isActive: "IsActive"
+                }
+            },
             fields: {
                 id: "ID",
                 title: "Title",

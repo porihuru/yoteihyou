@@ -35,6 +35,7 @@
             <span id="month-title" class="month-title"></span>
             <button type="button" id="print-view" class="button toolbar-right">印刷</button>
             <button type="button" id="new-event" class="button button-primary toolbar-right">予定を追加</button>
+            <button type="button" id="open-settings" class="button toolbar-right">設定</button>
         </div>
 
         <div id="print-area" class="print-area">
@@ -120,7 +121,64 @@
                     <button type="button" id="delete-event" class="button button-danger" style="display:none;">削除</button>
                     <button type="button" id="cancel-edit" class="button">取消</button>
                 </div>
-                <p id="csv-readonly-note" class="readonly-note" style="display:none;">試験用CSV接続中は閲覧専用です。登録・更新・削除はSharePoint接続時に使用できます。</p>
+                <p id="csv-unsaved-note" class="readonly-note" style="display:none;">試験用CSVでの変更は画面上だけに反映されます。再読込・接続先切替・ページ終了で変更は消えます。</p>
+            </form>
+        </div>
+
+        <div id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" style="display:none;">
+            <div class="settings-header">
+                <h2 id="settings-title">組織設定</h2>
+                <button type="button" id="close-settings" class="button">閉じる</button>
+            </div>
+            <div id="settings-status" class="settings-status" aria-live="polite"></div>
+            <div class="settings-actions">
+                <button type="button" id="settings-new" class="button button-primary">新規設定</button>
+                <button type="button" id="settings-reload" class="button">SharePointから再読込</button>
+            </div>
+            <div class="settings-table-wrap">
+                <table class="settings-table">
+                    <thead>
+                        <tr>
+                            <th>大グループ</th>
+                            <th>小グループ</th>
+                            <th>月間</th>
+                            <th>週間</th>
+                            <th>日々</th>
+                            <th>順序</th>
+                            <th>状態</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="settings-body"></tbody>
+                </table>
+            </div>
+            <form id="settings-form" class="settings-form">
+                <h3 id="settings-form-title">設定を追加</h3>
+                <input type="hidden" id="setting-id" value="">
+                <div class="form-row form-row-half">
+                    <div>
+                        <label for="setting-group-name">大グループ <span class="required">必須</span></label>
+                        <input type="text" id="setting-group-name" maxlength="100">
+                    </div>
+                    <div>
+                        <label for="setting-team-name">小グループ</label>
+                        <input type="text" id="setting-team-name" maxlength="100">
+                    </div>
+                </div>
+                <div class="settings-number-row">
+                    <div><label for="setting-monthly-rows">月間行数</label><input type="number" id="setting-monthly-rows" min="1" max="50" value="5"></div>
+                    <div><label for="setting-weekly-rows">週間行数</label><input type="number" id="setting-weekly-rows" min="1" max="50" value="5"></div>
+                    <div><label for="setting-daily-rows">日々行数</label><input type="number" id="setting-daily-rows" min="1" max="50" value="5"></div>
+                    <div><label for="setting-sort-order">表示順</label><input type="number" id="setting-sort-order" value="0"></div>
+                </div>
+                <div class="form-row checkbox-row">
+                    <label><input type="checkbox" id="setting-active" checked> 有効</label>
+                </div>
+                <div class="editor-actions">
+                    <button type="submit" id="settings-save" class="button button-primary">保存</button>
+                    <button type="button" id="settings-delete" class="button button-danger" style="display:none;">削除</button>
+                    <button type="button" id="settings-cancel-edit" class="button">入力取消</button>
+                </div>
             </form>
         </div>
     </div>
@@ -130,7 +188,9 @@
     <script src="js/util.js"></script>
     <script src="js/csv-data-source.js"></script>
     <script src="js/sharepoint-data-source.js"></script>
+    <script src="js/sharepoint-settings-data-source.js"></script>
     <script src="js/data-service.js"></script>
+    <script src="js/settings-controller.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

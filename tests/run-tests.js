@@ -36,9 +36,16 @@ function loadBrowserScripts(files) {
     return context;
 }
 
-var context = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js"]);
+var context = loadBrowserScripts([
+    "js/util.js",
+    "js/csv-data-source.js",
+    "js/sharepoint-data-source.js",
+    "js/sharepoint-settings-data-source.js"
+]);
 var util = context.window.YoteihyouUtil;
+var CsvDataSource = context.window.YoteihyouCsvDataSource;
 var SharePointDataSource = context.window.YoteihyouSharePointDataSource;
+var OrganizationSettingsDataSource = context.window.YoteihyouOrganizationSettingsDataSource;
 var options = {
     siteUrl: "https://example.invalid/sites/test",
     listTitle: "予定表",
@@ -52,6 +59,23 @@ var options = {
         location: "Location",
         description: "Description",
         purpose: "Purpose"
+    }
+};
+var organizationSettingsOptions = {
+    siteUrl: "https://example.invalid/sites/test",
+    organizationSettings: {
+        enabled: true,
+        listTitle: "予定表組織設定",
+        fields: {
+            id: "ID",
+            groupName: "Title",
+            teamName: "TeamName",
+            monthlyRows: "MonthlyRows",
+            weeklyRows: "WeeklyRows",
+            dailyRows: "DailyRows",
+            sortOrder: "SortOrder",
+            isActive: "IsActive"
+        }
     }
 };
 
@@ -72,6 +96,91 @@ test("範囲外の時分を拒否する", function () {
 
 test("日時の後ろに余分な文字がある値を拒否する", function () {
     assert.strictEqual(util.parseDate("2026-09-16 09:00 invalid"), null);
+});
+
+test("CSVの予定を画面上で追加・更新・削除できる", function () {
+    var source = new CsvDataSource({url: "data/schedule.csv"});
+    var items;
+    var item = {
+        id: "",
+        title: "一時予定",
+        startDate: new Date(2026, 8, 16, 9, 0),
+        endDate: new Date(2026, 8, 16, 10, 0)
+    };
+    assert.strictEqual(source.readOnly, false);
+    source.create(item, function (created, snapshot) {
+        items = snapshot;
+    }, function (message) {
+        throw new Error(message);
+    });
+    assert.strictEqual(items.length, 1);
+    assert.ok(item.id.indexOf("csv-local-") === 0);
+
+    item.title = "変更後";
+    source.update(item, function (updated, snapshot) {
+        items = snapshot;
+    }, function (message) {
+        throw new Error(message);
+    });
+    assert.strictEqual(items[0].title, "変更後");
+
+    source.remove(item, function (removed, snapshot) {
+        items = snapshot;
+    }, function (message) {
+        throw new Error(message);
+    });
+    assert.strictEqual(items.length, 0);
+});
+
+test("SharePointの設定項目を組織設定へ変換できる", function () {
+    var source = new OrganizationSettingsDataSource(organizationSettingsOptions);
+    var converted = source.toOrganizationConfig([
+        {id: 3, groupName: "GP2", teamName: "", monthlyRows: 1, weeklyRows: 2, dailyRows: 3, sortOrder: 20, isActive: true},
+        {id: 1, groupName: "GP1科", teamName: "GS班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2, sortOrder: 10, isActive: true},
+        {id: 2, groupName: "GP1科", teamName: "JN班", monthlyRows: 4, weeklyRows: 3, dailyRows: 2, sortOrder: 11, isActive: true},
+        {id: 4, groupName: "無効", teamName: "", monthlyRows: 1, weeklyRows: 1, dailyRows: 1, sortOrder: 30, isActive: false}
+    ], {separator: "／", metadataSeparator: "｜", targetSeparator: "・"});
+    assert.strictEqual(converted.groups.length, 2);
+    assert.strictEqual(converted.groups[0].name, "GP1科");
+    assert.strictEqual(converted.groups[0].teams.length, 2);
+    assert.strictEqual(converted.groups[0].teams[1].name, "JN班");
+    assert.strictEqual(converted.groups[1].name, "GP2");
+    assert.strictEqual(converted.groups[1].dailyRows, 3);
+});
+
+test("組織設定の更新時にETagを送る", function () {
+    var source = new OrganizationSettingsDataSource(organizationSettingsOptions);
+    var sentHeaders;
+    var sentPayload;
+    var item = {
+        id: 5,
+        etag: "\"8\"",
+        groupName: "GP1",
+        teamName: "",
+        monthlyRows: 5,
+        weeklyRows: 4,
+        dailyRows: 3,
+        sortOrder: 10,
+        isActive: true
+    };
+    source.client.getEntityType = function (success) {
+        success("SP.Data.SettingsListItem");
+    };
+    source.client.getDigest = function (success) {
+        success("digest");
+    };
+    source.client.request = function (method, url, headers, body, success) {
+        sentHeaders = headers;
+        sentPayload = JSON.parse(body);
+        success({responseText: ""});
+    };
+    source.update(item, function () {}, function (message) {
+        throw new Error(message);
+    });
+    assert.strictEqual(sentHeaders["IF-MATCH"], "\"8\"");
+    assert.strictEqual(sentHeaders["X-HTTP-Method"], "MERGE");
+    assert.strictEqual(sentPayload.Title, "GP1");
+    assert.strictEqual(sentPayload.WeeklyRows, 4);
 });
 
 test("SharePointのETagを予定へ保持する", function () {

@@ -13,6 +13,8 @@
     var organizationConfig = window.YOTEIHYOU_ORGANIZATIONS || {separator: "／", sections: []};
     var util = window.YoteihyouUtil;
     var service = new window.YoteihyouDataService(config);
+    var organizationSettingsSource = new window.YoteihyouOrganizationSettingsDataSource(config.sharePoint);
+    var settingsController = null;
     var state = {
         viewMode: "monthly",
         displayDate: startOfDay(new Date()),
@@ -72,7 +74,7 @@
                 formElements[i].disabled = readOnly;
             }
         }
-        byId("csv-readonly-note").style.display = readOnly ? "block" : "none";
+        byId("csv-unsaved-note").style.display = service.getMode() === "csv" ? "block" : "none";
     }
 
     function setEditorLayoutOpen(isOpen) {
@@ -786,7 +788,7 @@
         var readOnly = service.isReadOnly();
         var purpose;
         if (!item && readOnly) {
-            setMessage("試験用CSVは閲覧専用です。新規入力はSharePointへ切り替えてください。", true);
+            setMessage("現在の接続先は閲覧専用です。", true);
             return;
         }
         state.editingItem = item || null;
@@ -858,7 +860,7 @@
             ),
             sortOrder: 0,
             isActive: true,
-            source: "sharepoint"
+            source: service.getMode()
         };
     }
 
@@ -917,13 +919,15 @@
     function saveEvent(event) {
         var item;
         var current;
+        var mode = service.getMode();
+        var sourceLabel = mode === "csv" ? "CSV" : "SharePoint";
         if (event && event.preventDefault) {
             event.preventDefault();
         } else if (window.event) {
             window.event.returnValue = false;
         }
         if (service.isReadOnly()) {
-            setMessage("試験用CSVは閲覧専用です。", true);
+            setMessage("現在の接続先は閲覧専用です。", true);
             return false;
         }
         try {
@@ -936,12 +940,23 @@
         if (current) {
             item.etag = current.etag || "";
         }
-        setConnectionStatus("SharePoint 保存中", "");
-        (current ? service.update : service.create).call(service, item, function () {
+        setConnectionStatus(sourceLabel + " 保存中", "");
+        (current ? service.update : service.create).call(service, item, function (savedItem, items) {
             closeEditor();
-            reloadData(current ? "予定を更新しました。" : "予定を登録しました。");
+            if (mode === "csv") {
+                state.items = items;
+                renderCurrentView();
+                setConnectionStatus("試験用CSV 編集中（未保存）", "connected");
+                setMessage(
+                    current ? "予定を画面上で更新しました。再読込すると変更は消えます。" :
+                        "予定を画面上で追加しました。再読込すると変更は消えます。",
+                    false
+                );
+            } else {
+                reloadData(current ? "予定を更新しました。" : "予定を登録しました。");
+            }
         }, function (message) {
-            setConnectionStatus("SharePoint 保存失敗", "error");
+            setConnectionStatus(sourceLabel + " 保存失敗", "error");
             setMessage(message, true);
         });
         return false;
@@ -949,18 +964,27 @@
 
     function deleteEvent() {
         var item = state.editingItem;
+        var mode = service.getMode();
+        var sourceLabel = mode === "csv" ? "CSV" : "SharePoint";
         if (!item || service.isReadOnly()) {
             return;
         }
         if (!window.confirm("「" + item.title + "」を削除しますか？")) {
             return;
         }
-        setConnectionStatus("SharePoint 削除中", "");
-        service.remove(item, function () {
+        setConnectionStatus(sourceLabel + " 削除中", "");
+        service.remove(item, function (removedItem, items) {
             closeEditor();
-            reloadData("予定を削除しました。");
+            if (mode === "csv") {
+                state.items = items;
+                renderCurrentView();
+                setConnectionStatus("試験用CSV 編集中（未保存）", "connected");
+                setMessage("予定を画面上で削除しました。再読込すると元に戻ります。", false);
+            } else {
+                reloadData("予定を削除しました。");
+            }
         }, function (message) {
-            setConnectionStatus("SharePoint 削除失敗", "error");
+            setConnectionStatus(sourceLabel + " 削除失敗", "error");
             setMessage(message, true);
         });
     }
@@ -1203,6 +1227,19 @@
         service.setMode(mode);
         updateSourceControls();
         bindEvents();
+        settingsController = new window.YoteihyouSettingsController({
+            source: organizationSettingsSource,
+            baseConfig: organizationConfig,
+            onOpen: function () {
+                closeEditor();
+            },
+            onApply: function (newOrganizationConfig) {
+                organizationConfig = newOrganizationConfig;
+                loadOrganizationSections("", "");
+                renderCurrentView();
+            }
+        });
+        settingsController.initialize();
         renderCurrentView();
         reloadData("");
     }

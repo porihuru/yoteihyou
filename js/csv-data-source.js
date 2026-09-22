@@ -84,10 +84,17 @@
 
     function CsvDataSource(options) {
         this.url = options.url;
-        this.readOnly = true;
+        this.readOnly = false;
+        this.items = [];
+        this.nextLocalId = 1;
     }
 
+    CsvDataSource.prototype.getItems = function () {
+        return this.items.slice(0);
+    };
+
     CsvDataSource.prototype.load = function (range, success, failure) {
+        var self = this;
         var xhr = new XMLHttpRequest();
         var url = this.url + (this.url.indexOf("?") >= 0 ? "&" : "?") + "_=" + new Date().getTime();
         xhr.open("GET", url, true);
@@ -109,7 +116,8 @@
             try {
                 rows = parseCsv(xhr.responseText);
                 if (rows.length < 1) {
-                    success([]);
+                    self.items = [];
+                    success(self.getItems());
                     return;
                 }
                 headers = rows[0];
@@ -122,7 +130,8 @@
                         items.push(item);
                     }
                 }
-                success(items);
+                self.items = items;
+                success(self.getItems());
             } catch (error) {
                 failure("試験用CSVの形式を確認してください。" + (error.message ? " " + error.message : ""));
             }
@@ -131,11 +140,37 @@
     };
 
     CsvDataSource.prototype.create = function (item, success, failure) {
-        failure("試験用CSVは閲覧専用です。SharePointへ切り替えてください。");
+        item.id = "csv-local-" + new Date().getTime() + "-" + this.nextLocalId;
+        this.nextLocalId += 1;
+        item.source = "csv";
+        this.items.push(item);
+        success(item, this.getItems());
     };
 
-    CsvDataSource.prototype.update = CsvDataSource.prototype.create;
-    CsvDataSource.prototype.remove = CsvDataSource.prototype.create;
+    CsvDataSource.prototype.update = function (item, success, failure) {
+        var i;
+        for (i = 0; i < this.items.length; i += 1) {
+            if (String(this.items[i].id) === String(item.id)) {
+                item.source = "csv";
+                this.items[i] = item;
+                success(item, this.getItems());
+                return;
+            }
+        }
+        failure("変更する予定が見つかりません。試験用CSVを再読込してください。");
+    };
+
+    CsvDataSource.prototype.remove = function (item, success, failure) {
+        var i;
+        for (i = 0; i < this.items.length; i += 1) {
+            if (String(this.items[i].id) === String(item.id)) {
+                this.items.splice(i, 1);
+                success(item, this.getItems());
+                return;
+            }
+        }
+        failure("削除する予定が見つかりません。試験用CSVを再読込してください。");
+    };
 
     window.YoteihyouCsvDataSource = CsvDataSource;
 }(window));
