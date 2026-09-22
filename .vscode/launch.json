@@ -2,7 +2,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "予定表をEdgeで開く",
+            "name": "予定表をブラウザーで開く",
             "type": "node",
             "request": "launch",
             "program": "${workspaceFolder}/scripts/dev-server.js",
@@ -11,7 +11,7 @@
             "serverReadyAction": {
                 "pattern": "Development server ready at (https?://\\S+)",
                 "uriFormat": "%s",
-                "action": "debugWithEdge"
+                "action": "openExternally"
             }
         }
     ]

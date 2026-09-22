@@ -49,6 +49,7 @@
                 title: "Title",
                 startDate: "EventDate",
                 endDate: "EndDate",
+                allDay: "AllDay",
                 category: "Category",
                 location: "Location",
                 description: "Description",

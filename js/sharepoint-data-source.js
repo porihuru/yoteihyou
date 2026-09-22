@@ -84,7 +84,7 @@
             title: row[f.title] || "",
             startDate: startDate,
             endDate: endDate || startDate,
-            allDay: false,
+            allDay: f.allDay ? row[f.allDay] === true || row[f.allDay] === 1 : false,
             category: row[f.category] || "",
             location: row[f.location] || "",
             description: row[f.description] || "",
@@ -102,6 +102,7 @@
         var filter = "";
         var url;
         var items = [];
+        if (f.allDay) { select += "," + f.allDay; }
 
         try {
             if (range && range.startDate && range.endDate) {
@@ -186,6 +187,7 @@
         payload[f.location] = item.location || "";
         payload[f.description] = item.description || "";
         payload[f.purpose] = item.purpose || "";
+        if (f.allDay) { payload[f.allDay] = !!item.allDay; }
         return payload;
     };
 

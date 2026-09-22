@@ -56,13 +56,8 @@
             </div>
 
             <div id="daily-view" class="list-view schedule-view" style="display:none;">
-            <table class="schedule-list daily-list" aria-label="日々予定表">
-                <thead>
-                    <tr>
-                        <th class="time-column">時刻</th>
-                        <th>予定（空白の時間帯をクリックして入力）</th>
-                    </tr>
-                </thead>
+            <table class="schedule-list organization-schedule daily-list daily-horizontal-schedule" aria-label="日々予定表">
+                <thead id="daily-head"></thead>
                 <tbody id="daily-body"></tbody>
             </table>
             </div>
@@ -78,14 +73,31 @@
                 </div>
                 <div class="form-row form-row-half">
                     <div>
-                        <label for="start-date">開始日時 <span class="required">必須</span></label>
-                        <input type="text" id="start-date" placeholder="2026-09-16 09:00">
+                        <label for="start-date">開始日 <span class="required">必須</span></label>
+                        <input type="text" id="start-date" placeholder="2026-09-16">
+                        <button type="button" id="start-calendar-button" class="button">カレンダー</button>
+                        <div id="start-calendar" class="date-calendar" hidden></div>
+                        <label for="start-time">開始時刻</label>
+                        <div class="time-picker" id="start-time-picker">
+                            <input type="text" id="start-time" placeholder="入力または選択" maxlength="5" autocomplete="off">
+                            <button type="button" id="start-time-toggle" aria-label="開始時刻の候補" aria-expanded="false" aria-controls="start-time-options">▼</button>
+                            <div id="start-time-options" class="time-options" hidden></div>
+                        </div>
                     </div>
                     <div>
-                        <label for="end-date">終了日時</label>
-                        <input type="text" id="end-date" placeholder="2026-09-16 10:00">
+                        <label for="end-date">終了日</label>
+                        <input type="text" id="end-date" placeholder="2026-09-16">
+                        <button type="button" id="end-calendar-button" class="button">カレンダー</button>
+                        <div id="end-calendar" class="date-calendar" hidden></div>
+                        <label for="end-time">終了時刻</label>
+                        <div class="time-picker" id="end-time-picker">
+                            <input type="text" id="end-time" placeholder="入力または選択" maxlength="5" autocomplete="off">
+                            <button type="button" id="end-time-toggle" aria-label="終了時刻の候補" aria-expanded="false" aria-controls="end-time-options">▼</button>
+                            <div id="end-time-options" class="time-options" hidden></div>
+                        </div>
                     </div>
                 </div>
+                <div class="form-row checkbox-row"><label><input type="checkbox" id="all-day"> 終日</label></div>
                 <div class="form-row checkbox-row output-targets">
                     <span class="form-label">反映先 <span class="required">必須</span></span>
                     <label><input type="checkbox" id="target-daily" checked> 日々</label>
@@ -191,6 +203,7 @@
     <script src="js/sharepoint-settings-data-source.js"></script>
     <script src="js/data-service.js"></script>
     <script src="js/settings-controller.js"></script>
+    <script src="js/date-time-editor.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

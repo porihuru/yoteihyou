@@ -390,20 +390,79 @@
         renderOrganizationSchedule("monthly", dates, byId("monthly-head"), byId("calendar-body"));
     }
 
-    function createTextCell(text, className) {
-        var cell = document.createElement("td");
-        if (className) {
-            cell.className = className;
-        }
-        cell.appendChild(document.createTextNode(text || ""));
-        return cell;
+    function formatDailyTime(minutes) {
+        return util.pad2(Math.floor(minutes / 60)) + util.pad2(minutes % 60);
     }
 
-    function createEventTitleButton(item) {
+    function getDailyItemRange(item, day, rangeStart, rangeEnd) {
+        if (item.allDay) { return {start: rangeStart, end: rangeEnd}; }
+        var endDate = item.endDate || item.startDate;
+        var startMinutes = sameDate(item.startDate, day) ?
+            item.startDate.getHours() * 60 + item.startDate.getMinutes() : rangeStart;
+        var endMinutes = sameDate(endDate, day) ?
+            endDate.getHours() * 60 + endDate.getMinutes() : rangeEnd;
+        startMinutes = Math.max(rangeStart, Math.min(rangeEnd, startMinutes));
+        endMinutes = Math.max(startMinutes, Math.min(rangeEnd, endMinutes));
+        return {start: startMinutes, end: endMinutes};
+    }
+
+    function appendDailyGridLines(container, rangeStart, rangeEnd, slotMinutes) {
+        var totalMinutes = rangeEnd - rangeStart;
+        var minute;
+        var line;
+        for (minute = rangeStart; minute <= rangeEnd; minute += slotMinutes) {
+            line = document.createElement("span");
+            line.className = "daily-grid-line";
+            line.style.left = ((minute - rangeStart) / totalMinutes * 100) + "%";
+            container.appendChild(line);
+        }
+    }
+
+    function createDailyEventBar(item, itemRange, displayRange, rangeStart, rangeEnd, laneIndex) {
+        var totalMinutes = rangeEnd - rangeStart;
+        var left = (displayRange.start - rangeStart) / totalMinutes * 100;
+        var width = (displayRange.end - displayRange.start) / totalMinutes * 100;
+        var displayDuration = displayRange.end - displayRange.start;
         var button = document.createElement("button");
+        var times = document.createElement("span");
+        var start = document.createElement("span");
+        var end = document.createElement("span");
+        var line = document.createElement("span");
+        var caption = document.createElement("span");
+
         button.type = "button";
-        button.className = "event-detail-button";
-        button.appendChild(document.createTextNode(item.title));
+        button.className = "daily-event-bar";
+        if (displayRange.start !== itemRange.start || displayRange.end !== itemRange.end) {
+            button.className += " daily-event-short";
+        }
+        button.style.left = left + "%";
+        button.style.width = width + "%";
+        button.style.top = (laneIndex * 52 + 5) + "px";
+        button.title = item.title + " / " + util.formatDateTime(item.startDate) + "～" +
+            util.formatDateTime(item.endDate || item.startDate) + (item.location ? " / " + item.location : "");
+
+        times.className = "daily-event-times";
+        start.className = "daily-event-start";
+        start.appendChild(document.createTextNode(formatDailyTime(itemRange.start)));
+        end.className = "daily-event-end";
+        end.appendChild(document.createTextNode(formatDailyTime(itemRange.end)));
+        times.appendChild(start);
+        times.appendChild(end);
+
+        line.className = "daily-event-line";
+        // Text may need extra room, but the line must follow the actual time axis.
+        line.style.left = ((itemRange.start - displayRange.start) / displayDuration * 100) + "%";
+        line.style.width = ((itemRange.end - itemRange.start) / displayDuration * 100) + "%";
+        caption.className = "daily-event-caption";
+        caption.appendChild(document.createTextNode(item.title + (item.location ? "（" + item.location + "）" : "")));
+
+        button.appendChild(times);
+        button.appendChild(line);
+        button.appendChild(caption);
+        if (item.allDay) {
+            button.removeChild(times);
+            button.title = item.title + " / 終日" + (item.location ? " / " + item.location : "");
+        }
         button.onclick = function (event) {
             stopEvent(event);
             openEditor(item);
@@ -412,22 +471,10 @@
         return button;
     }
 
-    function getDailyTimeRange(item, day) {
-        var startText = sameDate(item.startDate, day) ?
-            util.pad2(item.startDate.getHours()) + ":" + util.pad2(item.startDate.getMinutes()) : "継続";
-        var endDate = item.endDate || item.startDate;
-        var endText = sameDate(endDate, day) ?
-            util.pad2(endDate.getHours()) + ":" + util.pad2(endDate.getMinutes()) : "継続";
-        return startText + "～" + endText;
-    }
-
-    function getOrganizationFromItem(item) {
-        var purpose = splitPurpose(item.purpose || "");
-        return joinOrganization(purpose.section, purpose.team);
-    }
-
     function renderDaily() {
+        var head = byId("daily-head");
         var body = byId("daily-body");
+        var table = byId("daily-view").getElementsByTagName("table")[0];
         var day = state.displayDate;
         var items = getItemsForDay(day, "daily");
         var slotMinutes = parseInt(dailyViewConfig.slotMinutes, 10);
@@ -435,14 +482,28 @@
         var endHour = parseInt(dailyViewConfig.endHour, 10);
         var rangeStart;
         var rangeEnd;
+        var totalMinutes;
+        var blocks;
+        var blockItems;
+        var placedItems;
+        var laneEnds;
+        var rowCount;
+        var itemRange;
+        var visualDuration;
+        var minimumVisualDuration;
+        var visualStart;
+        var visualEnd;
         var itemMinutes;
-        var slotItems;
-        var slotDate;
+        var endDate;
+        var laneIndex;
+        var headerRow;
+        var headerCell;
+        var axis;
+        var label;
         var row;
-        var eventsCell;
-        var eventBox;
-        var meta;
-        var organization;
+        var groupCell;
+        var timelineCell;
+        var timeline;
         var minute;
         var i;
         var j;
@@ -470,84 +531,122 @@
         byId("print-heading").innerHTML = formatJapaneseDate(day, true) + "　日々予定表";
 
         for (i = 0; i < items.length; i += 1) {
+            if (items[i].allDay) { continue; }
             if (sameDate(items[i].startDate, day)) {
                 itemMinutes = items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes();
                 rangeStart = Math.min(rangeStart, Math.floor(itemMinutes / slotMinutes) * slotMinutes);
-                rangeEnd = Math.max(rangeEnd, Math.floor(itemMinutes / slotMinutes) * slotMinutes + slotMinutes);
+            }
+            endDate = items[i].endDate || items[i].startDate;
+            if (sameDate(endDate, day)) {
+                itemMinutes = endDate.getHours() * 60 + endDate.getMinutes();
+                rangeEnd = Math.max(rangeEnd, Math.ceil(itemMinutes / slotMinutes) * slotMinutes);
             }
         }
 
         rangeStart = Math.max(0, rangeStart);
-        rangeEnd = Math.min(24 * 60, rangeEnd);
-        for (minute = rangeStart; minute < rangeEnd; minute += slotMinutes) {
-            slotItems = [];
-            for (i = 0; i < items.length; i += 1) {
-                itemMinutes = sameDate(items[i].startDate, day) ?
-                    items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes() : rangeStart;
-                if (itemMinutes >= minute && itemMinutes < minute + slotMinutes) {
-                    slotItems.push(items[i]);
+        rangeEnd = Math.min(24 * 60, Math.max(rangeStart + slotMinutes, rangeEnd));
+        totalMinutes = rangeEnd - rangeStart;
+
+        while (head.firstChild) {
+            head.removeChild(head.firstChild);
+        }
+        headerRow = document.createElement("tr");
+        headerRow.appendChild(createHeaderCell("グループ", "organization-column"));
+        headerCell = document.createElement("th");
+        headerCell.className = "daily-timeline-header";
+        axis = document.createElement("div");
+        axis.className = "daily-timeline-axis";
+        for (minute = rangeStart; minute <= rangeEnd; minute += slotMinutes) {
+            label = document.createElement("span");
+            label.className = "daily-axis-label" +
+                (minute === rangeStart ? " first" : (minute === rangeEnd ? " last" : ""));
+            label.style.left = ((minute - rangeStart) / totalMinutes * 100) + "%";
+            label.appendChild(document.createTextNode(formatDailyTime(minute)));
+            axis.appendChild(label);
+        }
+        headerCell.appendChild(axis);
+        headerRow.appendChild(headerCell);
+        head.appendChild(headerRow);
+        table.style.minWidth = (155 + Math.ceil(totalMinutes / slotMinutes) * 88) + "px";
+
+        blocks = getOrganizationBlocks("daily", [day]);
+        for (i = 0; i < blocks.length; i += 1) {
+            blockItems = getItemsForOrganizationDay(blocks[i].section, blocks[i].team, day, "daily");
+            placedItems = [];
+            laneEnds = [];
+            for (j = 0; j < blockItems.length; j += 1) {
+                itemRange = getDailyItemRange(blockItems[j], day, rangeStart, rangeEnd);
+                minimumVisualDuration = Math.ceil(slotMinutes * 120 / 88);
+                visualDuration = Math.max(itemRange.end - itemRange.start, minimumVisualDuration);
+                visualStart = itemRange.start - (visualDuration - (itemRange.end - itemRange.start)) / 2;
+                visualEnd = visualStart + visualDuration;
+                if (visualStart < rangeStart) {
+                    visualEnd += rangeStart - visualStart;
+                    visualStart = rangeStart;
                 }
+                if (visualEnd > rangeEnd) {
+                    visualStart = Math.max(rangeStart, visualStart - (visualEnd - rangeEnd));
+                    visualEnd = rangeEnd;
+                }
+                laneIndex = 0;
+                while (laneIndex < laneEnds.length && visualStart < laneEnds[laneIndex]) {
+                    laneIndex += 1;
+                }
+                laneEnds[laneIndex] = visualEnd;
+                placedItems.push({
+                    item: blockItems[j],
+                    range: itemRange,
+                    displayRange: {start: visualStart, end: visualEnd},
+                    lane: laneIndex
+                });
             }
+            rowCount = Math.max(blocks[i].rowCount, laneEnds.length, 1);
 
             row = document.createElement("tr");
-            row.appendChild(createTextCell(
-                util.pad2(Math.floor(minute / 60)) + ":" + util.pad2(minute % 60),
-                "time-column"
-            ));
-            eventsCell = document.createElement("td");
-            eventsCell.className = "daily-slot clickable-slot";
-            eventsCell.title = "この時間に予定を追加";
-            if (slotItems.length === 0) {
-                eventsCell.appendChild((function () {
-                    var hint = document.createElement("span");
-                    hint.className = "empty-slot-hint screen-only";
-                    hint.appendChild(document.createTextNode("空白をクリックして入力"));
-                    return hint;
-                }()));
+            groupCell = document.createElement("th");
+            groupCell.className = "organization-name daily-organization-name";
+            groupCell.appendChild(document.createTextNode(blocks[i].label));
+            row.appendChild(groupCell);
+
+            timelineCell = document.createElement("td");
+            timelineCell.className = "daily-timeline-cell clickable-slot";
+            timelineCell.title = blocks[i].label + "の時間帯をクリックして予定を追加";
+            timeline = document.createElement("div");
+            timeline.className = "daily-timeline";
+            timeline.style.height = (rowCount * 52 + 8) + "px";
+            appendDailyGridLines(timeline, rangeStart, rangeEnd, slotMinutes);
+            for (j = 0; j < placedItems.length; j += 1) {
+                timeline.appendChild(createDailyEventBar(
+                    placedItems[j].item,
+                    placedItems[j].range,
+                    placedItems[j].displayRange,
+                    rangeStart,
+                    rangeEnd,
+                    placedItems[j].lane
+                ));
             }
-            for (j = 0; j < slotItems.length; j += 1) {
-                eventBox = document.createElement("div");
-                eventBox.className = "weekly-event";
-                eventBox.appendChild(createEventTitleButton(slotItems[j]));
-                meta = getDailyTimeRange(slotItems[j], day);
-                organization = getOrganizationFromItem(slotItems[j]);
-                if (organization) {
-                    meta += "　" + organization;
-                }
-                if (slotItems[j].location) {
-                    meta += "　" + slotItems[j].location;
-                }
-                if (meta) {
-                    eventBox.appendChild((function (text) {
-                        var span = document.createElement("span");
-                        span.className = "event-meta";
-                        span.appendChild(document.createTextNode(text));
-                        return span;
-                    }(meta)));
-                }
-                (function (box, item) {
-                    box.onclick = function (event) {
-                        stopEvent(event);
-                        openEditor(item);
-                    };
-                }(eventBox, slotItems[j]));
-                eventsCell.appendChild(eventBox);
-            }
-            slotDate = new Date(
-                day.getFullYear(),
-                day.getMonth(),
-                day.getDate(),
-                Math.floor(minute / 60),
-                minute % 60,
-                0,
-                0
-            );
-            (function (cell, targetDate) {
-                cell.onclick = function () {
-                    openEditor(null, targetDate, true);
+            timelineCell.appendChild(timeline);
+            (function (cell, section, team, startMinute, endMinute, interval, targetDay) {
+                cell.onclick = function (event) {
+                    var rect = cell.getBoundingClientRect();
+                    var sourceEvent = event || window.event;
+                    var ratio = rect.width > 0 ? (sourceEvent.clientX - rect.left) / rect.width : 0;
+                    var selectedMinute = startMinute + Math.floor((ratio * (endMinute - startMinute)) / interval) * interval;
+                    var targetDate;
+                    selectedMinute = Math.max(startMinute, Math.min(endMinute - interval, selectedMinute));
+                    targetDate = new Date(
+                        targetDay.getFullYear(),
+                        targetDay.getMonth(),
+                        targetDay.getDate(),
+                        Math.floor(selectedMinute / 60),
+                        selectedMinute % 60,
+                        0,
+                        0
+                    );
+                    openEditor(null, targetDate, true, {section: section, team: team});
                 };
-            }(eventsCell, slotDate));
-            row.appendChild(eventsCell);
+            }(timelineCell, blocks[i].section, blocks[i].team, rangeStart, rangeEnd, slotMinutes, day));
+            row.appendChild(timelineCell);
             body.appendChild(row);
         }
     }
@@ -772,8 +871,9 @@
         endDate = new Date(date.getTime() + durationMinutes * 60000);
         byId("event-id").value = "";
         byId("event-name").value = "";
-        byId("start-date").value = util.formatDateTime(date);
-        byId("end-date").value = util.formatDateTime(endDate);
+        window.YoteihyouDateTimeEditor.set("start", date);
+        window.YoteihyouDateTimeEditor.set("end", endDate);
+        byId("all-day").checked = false;
         setSelectedTargets(getAllTargetKeys());
         loadOrganizationSections(
             selectedOrganization ? selectedOrganization.section : "",
@@ -797,8 +897,9 @@
             byId("editor-title").innerHTML = readOnly ? "予定の詳細" : "予定を編集";
             byId("event-id").value = item.id;
             byId("event-name").value = item.title;
-            byId("start-date").value = util.formatDateTime(item.startDate);
-            byId("end-date").value = util.formatDateTime(item.endDate);
+            window.YoteihyouDateTimeEditor.set("start", item.startDate);
+            window.YoteihyouDateTimeEditor.set("end", item.endDate || item.startDate);
+            byId("all-day").checked = !!item.allDay;
             purpose = splitPurpose(item.purpose || "");
             setSelectedTargets(purpose.targets);
             loadOrganizationSections(purpose.section, purpose.team);
@@ -809,6 +910,7 @@
             byId("editor-title").innerHTML = "予定を追加";
         }
         setEditorReadOnly(readOnly);
+        window.YoteihyouDateTimeEditor.sync();
         byId("delete-event").style.display = item && !readOnly ? "inline-block" : "none";
         byId("event-editor").style.display = "block";
         setEditorLayoutOpen(true);
@@ -825,18 +927,19 @@
     }
 
     function readForm() {
-        var startDate = util.parseDate(byId("start-date").value);
-        var endDate = util.parseDate(byId("end-date").value);
+        var allDay = byId("all-day").checked;
+        var startDate = window.YoteihyouDateTimeEditor.read("start", allDay);
+        var endDate = window.YoteihyouDateTimeEditor.read("end", allDay);
         var title = util.trim(byId("event-name").value);
         var targets = getSelectedTargets();
         if (!title) {
             throw new Error("件名を入力してください。");
         }
         if (!startDate) {
-            throw new Error("開始日時を「2026-09-16 09:00」の形式で入力してください。");
+            throw new Error("開始日と時刻を正しく入力してください（日付: 2026-09-16、時刻: 0800）。");
         }
         if (!endDate) {
-            endDate = new Date(startDate.getTime());
+            throw new Error("終了日と時刻を正しく入力してください（日付: 2026-09-16、時刻: 1700）。");
         }
         if (endDate.getTime() < startDate.getTime()) {
             throw new Error("終了日時は開始日時以降にしてください。");
@@ -849,7 +952,7 @@
             title: title,
             startDate: startDate,
             endDate: endDate,
-            allDay: false,
+            allDay: allDay,
             category: util.trim(byId("category").value),
             location: util.trim(byId("location").value),
             description: util.trim(byId("description").value),
@@ -991,7 +1094,7 @@
 
     function updatePrintPageStyle() {
         var style = byId("print-page-style");
-        var size = state.viewMode === "monthly" ? "A3 landscape" : "A4 portrait";
+        var size = state.viewMode === "weekly" ? "A4 portrait" : "A3 landscape";
         var margin = parseFloat(printConfig.marginMm) || 10;
         var cssText = "@media print { @page { size: " + size + "; margin: " + margin + "mm; } }";
         if (style.styleSheet) {
@@ -1033,7 +1136,7 @@
         var calendar = activeView.getElementsByTagName("table")[0];
         var screenOnlyElements = activeView.getElementsByClassName("screen-only");
         var screenOnly = [];
-        var pageWidthMm = state.viewMode === "monthly" ? 420 : 210;
+        var pageWidthMm = state.viewMode === "weekly" ? 210 : 420;
         var pageHeightMm = 297;
         var marginMm = parseFloat(printConfig.marginMm) || 10;
         var pixelsPerMm = 96 / 25.4;
@@ -1220,6 +1323,7 @@
     }
 
     function initialize() {
+        window.YoteihyouDateTimeEditor.initialize();
         var mode = getStoredMode() || config.defaultDataSource;
         byId("app-title").innerHTML = util.escapeHtml(config.appTitle);
         document.title = config.appTitle;

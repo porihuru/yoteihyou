@@ -338,13 +338,167 @@ body.editor-open .app-shell {
     background: #f2f8fc;
 }
 
-.daily-slot {
-    height: 42px;
+.daily-horizontal-schedule {
+    table-layout: fixed;
 }
 
-.empty-slot-hint {
-    color: #8a99a8;
+.daily-horizontal-schedule .daily-timeline-header {
+    height: 30px;
+    padding: 0 6px;
+}
+
+.daily-timeline-axis {
+    position: relative;
+    height: 30px;
+}
+
+.daily-axis-label {
+    position: absolute;
+    top: 8px;
+    color: #333;
     font-size: 12px;
+    font-weight: bold;
+    line-height: 14px;
+    transform: translateX(-50%);
+}
+
+.daily-axis-label.first {
+    transform: none;
+}
+
+.daily-axis-label.last {
+    transform: translateX(-100%);
+}
+
+.organization-schedule .daily-organization-name {
+    vertical-align: top;
+}
+
+.organization-schedule .daily-timeline-cell {
+    height: auto;
+    padding: 0 6px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.daily-timeline {
+    position: relative;
+    width: 100%;
+    min-height: 42px;
+}
+
+.daily-grid-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid #d7dde3;
+    pointer-events: none;
+}
+
+.daily-event-bar {
+    position: absolute;
+    z-index: 1;
+    height: 44px;
+    min-width: 12px;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    color: #176aa4;
+    cursor: pointer;
+}
+
+.date-calendar[hidden] { display: none; }
+.time-picker { position: relative; }
+.time-picker input[type="text"] { padding-right: 30px; }
+.time-picker > button { position: absolute; right: 1px; top: 1px; bottom: 1px; width: 28px; border: 0; background: transparent; cursor: pointer; }
+.time-options[hidden] { display: none; }
+.time-options { position: absolute; top: 100%; left: 0; right: 0; max-height: 190px; overflow-y: auto; background: #fff; border: 1px solid #96abc2; z-index: 10; }
+.time-options button { display: block; width: 100%; padding: 7px 10px; border: 0; background: #fff; text-align: left; cursor: pointer; }
+.time-options button:hover, .time-options button:focus { background: #e3eff9; }
+.date-calendar { background: #fff; border: 1px solid #96abc2; padding: 4px; width: 100%; max-width: 260px; box-sizing: border-box; position: relative; z-index: 5; }
+.date-calendar table { width: 100%; table-layout: fixed; }
+.date-calendar td, .date-calendar th { padding: 1px; text-align: center; }
+.date-calendar button { padding: 4px 1px; min-width: 0; cursor: pointer; }
+.date-calendar td button { width: 100%; }
+
+.daily-event-times {
+    position: relative;
+    display: block;
+    height: 14px;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 14px;
+}
+
+.daily-event-start,
+.daily-event-end {
+    position: absolute;
+    top: 0;
+    white-space: nowrap;
+}
+
+.daily-event-start {
+    left: 0;
+}
+
+.daily-event-end {
+    right: 0;
+}
+
+.daily-event-line {
+    position: relative;
+    display: block;
+    height: 2px;
+    margin-top: 2px;
+    background: #176aa4;
+}
+
+.daily-event-line:before,
+.daily-event-line:after {
+    position: absolute;
+    top: -2px;
+    width: 2px;
+    height: 6px;
+    background: #176aa4;
+    content: "";
+}
+
+.daily-event-line:before {
+    left: 0;
+}
+
+.daily-event-line:after {
+    right: 0;
+}
+
+.daily-event-caption {
+    display: block;
+    margin-top: 5px;
+    overflow: hidden;
+    color: #173e5d;
+    font-size: 12px;
+    font-weight: bold;
+    line-height: 14px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.daily-event-bar:hover .daily-event-caption,
+.daily-event-bar:focus .daily-event-caption {
+    text-decoration: underline;
+}
+
+.daily-event-short .daily-event-times {
+    width: 100%;
+    background: #fff;
+}
+
+.daily-event-short .daily-event-caption {
+    width: 100%;
+    background: #fff;
 }
 
 .event-item {
@@ -751,5 +905,20 @@ body.editor-open .app-shell {
     .event-detail-button {
         color: #000;
         cursor: default;
+    }
+
+    .daily-grid-line {
+        border-left-color: #999;
+    }
+
+    .daily-event-bar,
+    .daily-event-caption {
+        color: #000;
+    }
+
+    .daily-event-line,
+    .daily-event-line:before,
+    .daily-event-line:after {
+        background: #000;
     }
 }

@@ -1,0 +1,167 @@
+<div id="daily-event-concept">
+  <style>
+    #daily-event-concept {
+      --dec-bg: light-dark(#f3f5f7, #15191d);
+      --dec-surface: light-dark(#ffffff, #20262c);
+      --dec-text: light-dark(#222222, #eef2f5);
+      --dec-muted: light-dark(#65727e, #aeb9c3);
+      --dec-border: light-dark(#aab6c1, #52606c);
+      --dec-grid: light-dark(#d7dde3, #3e4851);
+      --dec-group: light-dark(#eef2f5, #29323a);
+      --dec-event: light-dark(#176aa4, #62b4ee);
+      color: var(--dec-text);
+      font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+    }
+    #daily-event-concept .dec-window {
+      overflow: hidden;
+      border: 1px solid var(--dec-border);
+      border-radius: 4px;
+      background: var(--dec-surface);
+    }
+    #daily-event-concept .dec-title {
+      margin: 0;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--dec-border);
+      color: light-dark(#174f7c, #8dc7ed);
+      font-size: 18px;
+      font-weight: 500;
+    }
+    #daily-event-concept .dec-scroll {
+      overflow-x: auto;
+      padding: 16px;
+      background: var(--dec-bg);
+    }
+    #daily-event-concept .dec-table {
+      display: grid;
+      grid-template-columns: 138px 720px;
+      min-width: 858px;
+      border: 1px solid var(--dec-border);
+      background: var(--dec-surface);
+    }
+    #daily-event-concept .dec-corner,
+    #daily-event-concept .dec-group {
+      padding: 10px;
+      border-right: 1px solid var(--dec-border);
+      background: var(--dec-group);
+      font-weight: 500;
+    }
+    #daily-event-concept .dec-corner {
+      border-bottom: 1px solid var(--dec-border);
+      text-align: center;
+    }
+    #daily-event-concept .dec-axis {
+      position: relative;
+      height: 40px;
+      border-bottom: 1px solid var(--dec-border);
+      background: var(--dec-group);
+    }
+    #daily-event-concept .dec-axis-label {
+      position: absolute;
+      top: 10px;
+      transform: translateX(-50%);
+      color: var(--dec-text);
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    #daily-event-concept .dec-axis-label:first-child {
+      transform: none;
+    }
+    #daily-event-concept .dec-lane {
+      position: relative;
+      height: 112px;
+      overflow: hidden;
+      background: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent 239px,
+        var(--dec-grid) 239px,
+        var(--dec-grid) 240px
+      );
+    }
+    #daily-event-concept .dec-event {
+      position: absolute;
+      top: 17px;
+      left: 120px;
+      width: 300px;
+      color: var(--dec-event);
+    }
+    #daily-event-concept .dec-times {
+      position: relative;
+      height: 24px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    #daily-event-concept .dec-time-start,
+    #daily-event-concept .dec-time-end {
+      position: absolute;
+      top: 0;
+      white-space: nowrap;
+    }
+    #daily-event-concept .dec-time-start {
+      left: 0;
+      transform: translateX(-50%);
+    }
+    #daily-event-concept .dec-time-end {
+      right: 0;
+      transform: translateX(50%);
+    }
+    #daily-event-concept .dec-line {
+      position: relative;
+      height: 2px;
+      background: currentColor;
+    }
+    #daily-event-concept .dec-line::before,
+    #daily-event-concept .dec-line::after {
+      position: absolute;
+      top: -3px;
+      width: 2px;
+      height: 8px;
+      background: currentColor;
+      content: "";
+    }
+    #daily-event-concept .dec-line::before { left: 0; }
+    #daily-event-concept .dec-line::after { right: 0; }
+    #daily-event-concept .dec-event-label {
+      margin-top: 9px;
+      color: var(--dec-text);
+      text-align: center;
+      white-space: nowrap;
+    }
+    #daily-event-concept .dec-location {
+      color: var(--dec-muted);
+    }
+    #daily-event-concept .dec-note {
+      margin-top: 10px;
+      color: var(--dec-muted);
+      font-size: 13px;
+    }
+  </style>
+
+  <div class="dec-window">
+    <h2 class="dec-title">9月16日（水） 日々予定表</h2>
+    <div class="dec-scroll">
+      <div class="dec-table" role="img" aria-label="表の時刻目盛りは9時、10時、11時、12時。GP1の予定は9時30分から10時45分までで、全体会議、第1会議室と表示する。">
+        <div class="dec-corner">グループ</div>
+        <div class="dec-axis">
+          <span class="dec-axis-label" style="left:0">09:00</span>
+          <span class="dec-axis-label" style="left:240px">10:00</span>
+          <span class="dec-axis-label" style="left:480px">11:00</span>
+          <span class="dec-axis-label" style="left:720px">12:00</span>
+        </div>
+
+        <div class="dec-group">GP1</div>
+        <div class="dec-lane">
+          <div class="dec-event">
+            <div class="dec-times">
+              <span class="dec-time-start">09:30</span>
+              <span class="dec-time-end">10:45</span>
+            </div>
+            <div class="dec-line"></div>
+            <div class="dec-event-label">全体会議 <span class="dec-location">（第1会議室）</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="dec-note">予定の左右位置と線の長さを、実際の開始・終了時刻に比例させます。</div>
+    </div>
+  </div>
+</div>

@@ -71,7 +71,7 @@
             title: util.trim(source.Title),
             startDate: startDate,
             endDate: endDate || startDate,
-            allDay: false,
+            allDay: /^(true|1)$/i.test(util.trim(source.AllDay)),
             category: util.trim(source.Category),
             location: util.trim(source.Location),
             description: util.trim(source.Description),

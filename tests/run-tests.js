@@ -266,14 +266,84 @@ test("ETagがない予定の更新を拒否する", function () {
     assert.ok(failureMessage.indexOf("再読込") >= 0);
 });
 
-test("日々表示が時間枠設定を使用する", function () {
+test("日々表示が組織縦・時刻横の時間枠を使用する", function () {
     var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
     assert.ok(appSource.indexOf("dailyViewConfig.slotMinutes") >= 0);
     assert.ok(appSource.indexOf("dailyViewConfig.startHour") >= 0);
     assert.ok(appSource.indexOf("dailyViewConfig.endHour") >= 0);
-    assert.ok(html.indexOf("空白の時間帯をクリックして入力") >= 0);
-    assert.strictEqual(html.indexOf('id="daily-head"'), -1);
+    assert.ok(appSource.indexOf('createHeaderCell("グループ"') >= 0);
+    assert.ok(appSource.indexOf('getOrganizationBlocks("daily"') >= 0);
+    assert.ok(appSource.indexOf("function createDailyEventBar") >= 0);
+    assert.ok(appSource.indexOf('button.className += " daily-event-short"') >= 0);
+    assert.ok(appSource.indexOf("minimumVisualDuration = Math.ceil(slotMinutes * 120 / 88)") >= 0);
+    assert.ok(appSource.indexOf("displayRange: {start: visualStart, end: visualEnd}") >= 0);
+    assert.ok(appSource.indexOf('line.className = "daily-event-line"') >= 0);
+    assert.ok(appSource.indexOf('caption.className = "daily-event-caption"') >= 0);
+    assert.ok(html.indexOf('id="daily-head"') >= 0);
+    assert.ok(html.indexOf("daily-horizontal-schedule") >= 0);
+});
+
+test("短時間予定の横線は文字枠を広げても実時刻に一致する", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({
+        document: {
+            createElement: function () {
+                return {style: {}, children: [], appendChild: function (child) { this.children.push(child); }};
+            },
+            createTextNode: function (value) { return value; }
+        },
+        util: util,
+        formatDailyTime: function (value) { return String(value); }
+    });
+    vm.runInContext(source.slice(source.indexOf("    function createDailyEventBar("),
+        source.indexOf("    function renderDaily(")), scope);
+    [
+        {actual: {start: 420, end: 430}, display: {start: 384, end: 466}},
+        {actual: {start: 360, end: 370}, display: {start: 360, end: 442}},
+        {actual: {start: 1310, end: 1320}, display: {start: 1238, end: 1320}},
+        {actual: {start: 540, end: 600}, display: {start: 529, end: 611}}
+    ].forEach(function (range) {
+        var button = scope.createDailyEventBar({title: "test", startDate: new Date(2026, 8, 22)},
+            range.actual, range.display, 360, 1320, 0);
+        var line = button.children[1];
+        var buttonLeft = parseFloat(button.style.left);
+        var buttonWidth = parseFloat(button.style.width);
+        var start = buttonLeft + buttonWidth * parseFloat(line.style.left) / 100;
+        var end = start + buttonWidth * parseFloat(line.style.width) / 100;
+        assert.ok(Math.abs(start - (range.actual.start - 360) / 960 * 100) < 0.00001);
+        assert.ok(Math.abs(end - (range.actual.end - 360) / 960 * 100) < 0.00001);
+    });
+});
+
+test("分離した日時入力は直接時刻・終日・不正値を扱える", function () {
+    var nodes = {"start-date": {value: "2026-09-22"}, "start-time": {value: "0815"},
+        "end-date": {value: "2026-09-23"}, "end-time": {value: "1700"}};
+    var scope = vm.createContext({window: {YoteihyouUtil: util}, document: {
+        getElementById: function (id) { return nodes[id]; }
+    }});
+    vm.runInContext(fs.readFileSync(path.join(root, "js/date-time-editor.js"), "utf8"), scope);
+    var editor = scope.window.YoteihyouDateTimeEditor;
+    assert.strictEqual(util.formatDateTime(editor.read("start", false)), "2026-09-22 08:15");
+    nodes["start-time"].value = "07:10";
+    assert.strictEqual(util.formatDateTime(editor.read("start", false)), "2026-09-22 07:10");
+    nodes["start-time"].value = "2460";
+    assert.strictEqual(editor.read("start", false), null);
+    assert.strictEqual(util.formatDateTime(editor.read("start", true)), "2026-09-22 00:00");
+    assert.strictEqual(util.formatDateTime(editor.read("end", true)), "2026-09-23 23:59");
+    nodes["start-date"].value = "2026-02-30";
+    assert.strictEqual(editor.read("start", true), null);
+});
+
+test("SharePointの終日フラグを保存して読み戻せる", function () {
+    var settings = JSON.parse(JSON.stringify(options));
+    settings.fields.allDay = "AllDay";
+    var source = new SharePointDataSource(settings);
+    var payload = source.toPayload({title: "終日予定", startDate: new Date(2026, 8, 22), allDay: true}, "Test");
+    assert.strictEqual(payload.AllDay, true);
+    assert.strictEqual(source.toItem(payload).allDay, true);
+    payload.AllDay = false;
+    assert.strictEqual(source.toItem(payload).allDay, false);
 });
 
 process.stdout.write(passed + " tests passed\n");
