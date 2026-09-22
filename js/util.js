@@ -34,6 +34,8 @@
         var text;
         var match;
         var date;
+        var hour;
+        var minute;
 
         if (Object.prototype.toString.call(value) === "[object Date]") {
             return new Date(value.getTime());
@@ -44,8 +46,14 @@
             return null;
         }
 
-        match = /^(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})(?:[ T](\d{1,2})(?::?(\d{1,2}))?)?/.exec(text);
+        match = /^(\d{4})[-\/]?(\d{1,2})[-\/]?(\d{1,2})(?:[ T](\d{1,2})(?::?(\d{1,2}))?)?$/.exec(text);
         if (!match) {
+            return null;
+        }
+
+        hour = parseInt(match[4] || "0", 10);
+        minute = parseInt(match[5] || "0", 10);
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
             return null;
         }
 
@@ -53,8 +61,8 @@
             parseInt(match[1], 10),
             parseInt(match[2], 10) - 1,
             parseInt(match[3], 10),
-            parseInt(match[4] || "0", 10),
-            parseInt(match[5] || "0", 10),
+            hour,
+            minute,
             0,
             0
         );

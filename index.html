@@ -55,8 +55,13 @@
             </div>
 
             <div id="daily-view" class="list-view schedule-view" style="display:none;">
-            <table class="schedule-list organization-schedule daily-list" aria-label="日々予定表">
-                <thead id="daily-head"></thead>
+            <table class="schedule-list daily-list" aria-label="日々予定表">
+                <thead>
+                    <tr>
+                        <th class="time-column">時刻</th>
+                        <th>予定（空白の時間帯をクリックして入力）</th>
+                    </tr>
+                </thead>
                 <tbody id="daily-body"></tbody>
             </table>
             </div>

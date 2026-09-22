@@ -21,6 +21,7 @@
         editingItem: null
     };
     var printState = null;
+    var loadRequestId = 0;
 
     function byId(id) {
         return document.getElementById(id);
@@ -424,10 +425,129 @@
     }
 
     function renderDaily() {
+        var body = byId("daily-body");
         var day = state.displayDate;
+        var items = getItemsForDay(day, "daily");
+        var slotMinutes = parseInt(dailyViewConfig.slotMinutes, 10);
+        var startHour = parseInt(dailyViewConfig.startHour, 10);
+        var endHour = parseInt(dailyViewConfig.endHour, 10);
+        var rangeStart;
+        var rangeEnd;
+        var itemMinutes;
+        var slotItems;
+        var slotDate;
+        var row;
+        var eventsCell;
+        var eventBox;
+        var meta;
+        var organization;
+        var minute;
+        var i;
+        var j;
+
+        if (isNaN(slotMinutes) || slotMinutes < 1 || slotMinutes > 24 * 60) {
+            slotMinutes = 60;
+        }
+        if (isNaN(startHour) || startHour < 0 || startHour > 23) {
+            startHour = 6;
+        }
+        if (isNaN(endHour) || endHour < 1 || endHour > 24) {
+            endHour = 22;
+        }
+        if (endHour <= startHour) {
+            startHour = 6;
+            endHour = 22;
+        }
+        rangeStart = startHour * 60;
+        rangeEnd = endHour * 60;
+
+        while (body.firstChild) {
+            body.removeChild(body.firstChild);
+        }
         byId("month-title").innerHTML = formatJapaneseDate(day, true);
         byId("print-heading").innerHTML = formatJapaneseDate(day, true) + "　日々予定表";
-        renderOrganizationSchedule("daily", [new Date(day.getTime())], byId("daily-head"), byId("daily-body"));
+
+        for (i = 0; i < items.length; i += 1) {
+            if (sameDate(items[i].startDate, day)) {
+                itemMinutes = items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes();
+                rangeStart = Math.min(rangeStart, Math.floor(itemMinutes / slotMinutes) * slotMinutes);
+                rangeEnd = Math.max(rangeEnd, Math.floor(itemMinutes / slotMinutes) * slotMinutes + slotMinutes);
+            }
+        }
+
+        rangeStart = Math.max(0, rangeStart);
+        rangeEnd = Math.min(24 * 60, rangeEnd);
+        for (minute = rangeStart; minute < rangeEnd; minute += slotMinutes) {
+            slotItems = [];
+            for (i = 0; i < items.length; i += 1) {
+                itemMinutes = sameDate(items[i].startDate, day) ?
+                    items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes() : rangeStart;
+                if (itemMinutes >= minute && itemMinutes < minute + slotMinutes) {
+                    slotItems.push(items[i]);
+                }
+            }
+
+            row = document.createElement("tr");
+            row.appendChild(createTextCell(
+                util.pad2(Math.floor(minute / 60)) + ":" + util.pad2(minute % 60),
+                "time-column"
+            ));
+            eventsCell = document.createElement("td");
+            eventsCell.className = "daily-slot clickable-slot";
+            eventsCell.title = "この時間に予定を追加";
+            if (slotItems.length === 0) {
+                eventsCell.appendChild((function () {
+                    var hint = document.createElement("span");
+                    hint.className = "empty-slot-hint screen-only";
+                    hint.appendChild(document.createTextNode("空白をクリックして入力"));
+                    return hint;
+                }()));
+            }
+            for (j = 0; j < slotItems.length; j += 1) {
+                eventBox = document.createElement("div");
+                eventBox.className = "weekly-event";
+                eventBox.appendChild(createEventTitleButton(slotItems[j]));
+                meta = getDailyTimeRange(slotItems[j], day);
+                organization = getOrganizationFromItem(slotItems[j]);
+                if (organization) {
+                    meta += "　" + organization;
+                }
+                if (slotItems[j].location) {
+                    meta += "　" + slotItems[j].location;
+                }
+                if (meta) {
+                    eventBox.appendChild((function (text) {
+                        var span = document.createElement("span");
+                        span.className = "event-meta";
+                        span.appendChild(document.createTextNode(text));
+                        return span;
+                    }(meta)));
+                }
+                (function (box, item) {
+                    box.onclick = function (event) {
+                        stopEvent(event);
+                        openEditor(item);
+                    };
+                }(eventBox, slotItems[j]));
+                eventsCell.appendChild(eventBox);
+            }
+            slotDate = new Date(
+                day.getFullYear(),
+                day.getMonth(),
+                day.getDate(),
+                Math.floor(minute / 60),
+                minute % 60,
+                0,
+                0
+            );
+            (function (cell, targetDate) {
+                cell.onclick = function () {
+                    openEditor(null, targetDate, true);
+                };
+            }(eventsCell, slotDate));
+            row.appendChild(eventsCell);
+            body.appendChild(row);
+        }
     }
 
     function renderWeekly() {
@@ -742,11 +862,33 @@
         };
     }
 
+    function getCurrentLoadRange() {
+        var startDate;
+        var endDate;
+        if (state.viewMode === "daily") {
+            startDate = startOfDay(state.displayDate);
+            endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 1);
+        } else if (state.viewMode === "weekly") {
+            startDate = startOfWeek(state.displayDate);
+            endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 7);
+        } else {
+            startDate = new Date(state.displayMonth.getFullYear(), state.displayMonth.getMonth(), 1);
+            endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 1);
+        }
+        return {startDate: startDate, endDate: endDate};
+    }
+
     function reloadData(successMessage) {
         var mode = service.getMode();
+        var requestId = loadRequestId + 1;
+        var range = getCurrentLoadRange();
+        loadRequestId = requestId;
         setMessage("", false);
         setConnectionStatus((mode === "csv" ? "CSV" : "SharePoint") + " 読込中", "");
-        service.load(function (items) {
+        service.load(range, function (items) {
+            if (requestId !== loadRequestId) {
+                return;
+            }
             state.items = items;
             renderCurrentView();
             setConnectionStatus((mode === "csv" ? "試験用CSV" : "SharePoint") + " 接続済（" + items.length + "件）", "connected");
@@ -754,6 +896,9 @@
                 setMessage(successMessage, false);
             }
         }, function (message) {
+            if (requestId !== loadRequestId) {
+                return;
+            }
             state.items = [];
             renderCurrentView();
             setConnectionStatus((mode === "csv" ? "CSV" : "SharePoint") + " 接続失敗", "error");
@@ -788,6 +933,9 @@
             return false;
         }
         current = item.id ? findItemById(item.id) : null;
+        if (current) {
+            item.etag = current.etag || "";
+        }
         setConnectionStatus("SharePoint 保存中", "");
         (current ? service.update : service.create).call(service, item, function () {
             closeEditor();
@@ -956,6 +1104,9 @@
             state.displayMonth = new Date(state.displayDate.getFullYear(), state.displayDate.getMonth(), 1);
         }
         renderCurrentView();
+        if (service.getMode() === "sharepoint") {
+            reloadData("");
+        }
     }
 
     function moveView(amount) {
@@ -968,6 +1119,9 @@
             state.displayDate = new Date(state.displayMonth.getTime());
         }
         renderCurrentView();
+        if (service.getMode() === "sharepoint") {
+            reloadData("");
+        }
     }
 
     function goCurrentPeriod() {
@@ -975,6 +1129,9 @@
         state.displayDate = today;
         state.displayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         renderCurrentView();
+        if (service.getMode() === "sharepoint") {
+            reloadData("");
+        }
     }
 
     function bindEvents() {

@@ -32,6 +32,8 @@ Edge 95 と Internet Explorer 11（IEモードを含む）で動作する、Shar
 - **試験用CSV**: `data/schedule.csv` を `XMLHttpRequest` で読み込みます。閲覧専用です。
 - **SharePoint**: SharePoint REST APIを使用し、予定の読込・登録・更新・削除を行います。
 
+SharePoint接続では、現在表示している日・週・月と期間が重なる予定だけを取得します。表示期間を移動すると、その期間の予定を再取得します。
+
 最後に選択した接続先は `localStorage` に保存されます。保存しない場合は `js/config.js` の `rememberDataSource` を `false` にしてください。
 
 ## SharePointリスト
@@ -49,6 +51,8 @@ Edge 95 と Internet Explorer 11（IEモードを含む）で動作する、Shar
 | 目的（入力グループ保存先） | `Purpose` |
 
 `ID` は既存の標準列を使用します。入力グループと反映先は `GP1科／GS班｜日々・週間・月間` の形式で「目的」列へ保存します。大グループだけの場合は `GP1｜日々・週間・月間` の形式です。バナーURL、位置情報、空き時間情報、重複予約のチェック、出席者、設備、登録・更新情報など、アプリで使用しない列は変更しません。
+
+予定の読込時にSharePointのETagを保持し、更新・削除時に同じETagを送信します。読込後にほかのユーザーが予定を変更していた場合は上書きせず、再読込を求めるメッセージを表示します。
 
 ## 組織設定
 
@@ -105,7 +109,25 @@ ID,Title,EventDate,EndDate,Category,Location,Description,Purpose
 
 ## 配置
 
-リポジトリ一式を同じ構成のまま、SharePointのドキュメントライブラリまたはIISへ配置します。CSV読込はHTTP/HTTPS経由で行うため、`index.html` をローカルファイルとして直接開くより、Webサーバー上で確認してください。
+リポジトリ一式を同じ構成のまま配置します。SharePointの読込・登録・更新・削除を使用する場合は、認証CookieとREST APIへ同一オリジンでアクセスできるSharePointサイト内への配置を基本としてください。
+
+IISなどSharePointとは別オリジンのWebサーバーへ配置する場合、そのままではブラウザの同一オリジン制約によりSharePoint REST APIへ接続できないことがあります。別オリジンで運用するには、認証を引き継ぐ同一オリジンのリバースプロキシなどを別途用意してください。CORSを許可するだけでは、環境の認証方式によっては接続できません。
+
+CSV読込もHTTP/HTTPS経由で行うため、`index.html` をローカルファイルとして直接開くより、Webサーバー上で確認してください。
+
+## テスト
+
+追加パッケージは不要です。Node.jsが利用できる環境で次を実行します。
+
+```text
+node tests/run-tests.js
+```
+
+## VS Codeで実行
+
+このフォルダーをVS Codeで開き、F5キーを押して「予定表をEdgeで開く」を選択します。ローカル開発サーバーが `http://127.0.0.1:8765` で起動し、準備完了後にEdgeが開きます。停止はShift+F5です。
+
+8765番ポートを変更する場合は、VS Codeを起動する前に環境変数 `YOTEIHYOU_PORT` を設定してください。
 
 ## IE11互換方針
 

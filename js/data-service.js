@@ -24,8 +24,8 @@
         return this.sources[this.mode].readOnly === true;
     };
 
-    DataService.prototype.load = function (success, failure) {
-        this.sources[this.mode].load(success, failure);
+    DataService.prototype.load = function (range, success, failure) {
+        this.sources[this.mode].load(range, success, failure);
     };
 
     DataService.prototype.create = function (item, success, failure) {

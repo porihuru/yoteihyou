@@ -65,6 +65,8 @@
             }
             if ((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304) {
                 success(xhr);
+            } else if (xhr.status === 412) {
+                failure("ほかのユーザーがこの予定を更新しました。再読込してから、もう一度操作してください。");
             } else {
                 failure(util.getErrorMessage(xhr, "SharePointとの通信に失敗しました"));
             }
@@ -78,6 +80,7 @@
         var endDate = row[f.endDate] ? new Date(row[f.endDate]) : null;
         return {
             id: row[f.id],
+            etag: row.__metadata && row.__metadata.etag ? row.__metadata.etag : "",
             title: row[f.title] || "",
             startDate: startDate,
             endDate: endDate || startDate,
@@ -92,15 +95,21 @@
         };
     };
 
-    SharePointDataSource.prototype.load = function (success, failure) {
+    SharePointDataSource.prototype.load = function (range, success, failure) {
         var self = this;
         var f = this.fields;
         var select = [f.id, f.title, f.startDate, f.endDate, f.category, f.location, f.description, f.purpose].join(",");
+        var filter = "";
         var url;
         var items = [];
 
         try {
+            if (range && range.startDate && range.endDate) {
+                filter = f.startDate + " lt datetime'" + util.toIsoString(range.endDate) + "' and " +
+                    f.endDate + " ge datetime'" + util.toIsoString(range.startDate) + "'";
+            }
             url = this.getApiUrl(this.getListPath() + "/items?$select=" + encodeURIComponent(select) +
+                (filter ? "&$filter=" + encodeURIComponent(filter) : "") +
                 "&$orderby=" + encodeURIComponent(f.startDate + " asc") +
                 "&$top=" + encodeURIComponent(this.pageSize));
         } catch (error) {
@@ -182,6 +191,10 @@
 
     SharePointDataSource.prototype.write = function (item, isUpdate, success, failure) {
         var self = this;
+        if (isUpdate && !item.etag) {
+            failure("予定の更新情報を確認できません。再読込してから、もう一度操作してください。");
+            return;
+        }
         this.getEntityType(function (entityType) {
             self.getDigest(function (digest) {
                 var path = self.getListPath() + "/items";
@@ -192,7 +205,7 @@
                 var url;
                 if (isUpdate) {
                     path += "(" + encodeURIComponent(item.id) + ")";
-                    headers["IF-MATCH"] = "*";
+                    headers["IF-MATCH"] = item.etag;
                     headers["X-HTTP-Method"] = "MERGE";
                 }
                 url = self.getApiUrl(path);
@@ -204,6 +217,7 @@
                     }
                     data = util.getJson(xhr);
                     item.id = data.d[self.fields.id];
+                    item.etag = data.d.__metadata && data.d.__metadata.etag ? data.d.__metadata.etag : "";
                     success(item);
                 }, failure);
             }, failure);
@@ -220,11 +234,15 @@
 
     SharePointDataSource.prototype.remove = function (item, success, failure) {
         var self = this;
+        if (!item.etag) {
+            failure("予定の更新情報を確認できません。再読込してから、もう一度操作してください。");
+            return;
+        }
         this.getDigest(function (digest) {
             var url = self.getApiUrl(self.getListPath() + "/items(" + encodeURIComponent(item.id) + ")");
             self.request("POST", url, {
                 "X-RequestDigest": digest,
-                "IF-MATCH": "*",
+                "IF-MATCH": item.etag,
                 "X-HTTP-Method": "DELETE"
             }, null, function () {
                 success(item);

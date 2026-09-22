@@ -87,7 +87,7 @@
         this.readOnly = true;
     }
 
-    CsvDataSource.prototype.load = function (success, failure) {
+    CsvDataSource.prototype.load = function (range, success, failure) {
         var xhr = new XMLHttpRequest();
         var url = this.url + (this.url.indexOf("?") >= 0 ? "&" : "?") + "_=" + new Date().getTime();
         xhr.open("GET", url, true);
