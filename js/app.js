@@ -24,6 +24,15 @@
     };
     var printState = null;
     var loadRequestId = 0;
+    var DAILY_SNAP_MINUTES = 15;
+    var dailyInteraction = {
+        selectedItemId: "",
+        clipboard: null,
+        target: null,
+        drag: null,
+        indicator: null,
+        suppressItemId: ""
+    };
 
     function byId(id) {
         return document.getElementById(id);
@@ -158,6 +167,368 @@
             event.stopPropagation();
         }
         event.cancelBubble = true;
+    }
+
+    function preventEvent(event) {
+        event = event || window.event;
+        stopEvent(event);
+        if (event.preventDefault) {
+            event.preventDefault();
+        }
+        event.returnValue = false;
+        return false;
+    }
+
+    function hasClass(element, className) {
+        return element && (" " + element.className + " ").indexOf(" " + className + " ") >= 0;
+    }
+
+    function addClass(element, className) {
+        if (element && !hasClass(element, className)) {
+            element.className += (element.className ? " " : "") + className;
+        }
+    }
+
+    function removeClass(element, className) {
+        if (element) {
+            element.className = (" " + element.className + " ")
+                .replace(new RegExp("\\s" + className + "(?=\\s)", "g"), " ")
+                .replace(/^\s+|\s+$/g, "").replace(/\s+/g, " ");
+        }
+    }
+
+    function findParentByClass(element, className) {
+        while (element && element !== document.body) {
+            if (hasClass(element, className)) {
+                return element;
+            }
+            element = element.parentNode;
+        }
+        return null;
+    }
+
+    function cloneScheduleItem(item) {
+        return {
+            id: item.id,
+            etag: item.etag || "",
+            title: item.title,
+            startDate: new Date(item.startDate.getTime()),
+            endDate: new Date((item.endDate || item.startDate).getTime()),
+            allDay: !!item.allDay,
+            category: item.category || "",
+            location: item.location || "",
+            description: item.description || "",
+            purpose: item.purpose || "",
+            sortOrder: item.sortOrder || 0,
+            isActive: item.isActive !== false,
+            source: service.getMode()
+        };
+    }
+
+    function getSelectedDailyItem() {
+        return dailyInteraction.selectedItemId ? findItemById(dailyInteraction.selectedItemId) : null;
+    }
+
+    function selectDailyItem(item, button) {
+        var selected = document.getElementsByClassName("daily-event-selected");
+        while (selected.length > 0) {
+            removeClass(selected[0], "daily-event-selected");
+        }
+        dailyInteraction.selectedItemId = item ? String(item.id) : "";
+        if (button) {
+            addClass(button, "daily-event-selected");
+            dailyInteraction.target = getItemTarget(item, findParentByClass(button, "daily-timeline-cell"));
+        }
+    }
+
+    function hideDailyContextMenu() {
+        byId("daily-context-menu").style.display = "none";
+    }
+
+    function getDailyTarget(cell, clientX, allowRangeEnd) {
+        var meta = cell && cell._dailyMeta;
+        var rect;
+        var ratio;
+        var rawMinute;
+        var minute;
+        var maximum;
+        if (!meta) {
+            return null;
+        }
+        rect = meta.timeline.getBoundingClientRect();
+        ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+        ratio = Math.max(0, Math.min(1, ratio));
+        rawMinute = meta.rangeStart + ratio * (meta.rangeEnd - meta.rangeStart);
+        minute = Math.round(rawMinute / DAILY_SNAP_MINUTES) * DAILY_SNAP_MINUTES;
+        maximum = allowRangeEnd ? meta.rangeEnd : meta.rangeEnd - DAILY_SNAP_MINUTES;
+        minute = Math.max(meta.rangeStart, Math.min(maximum, minute));
+        return {
+            cell: cell,
+            timeline: meta.timeline,
+            section: meta.section,
+            team: meta.team,
+            day: new Date(meta.day.getTime()),
+            rangeStart: meta.rangeStart,
+            rangeEnd: meta.rangeEnd,
+            minute: minute
+        };
+    }
+
+    function getItemTarget(item, cell) {
+        var purpose = splitPurpose(item.purpose || "");
+        var meta = cell && cell._dailyMeta;
+        var minute = item.startDate.getHours() * 60 + item.startDate.getMinutes();
+        return {
+            cell: cell || null,
+            timeline: meta ? meta.timeline : null,
+            section: purpose.section,
+            team: purpose.team,
+            day: startOfDay(state.displayDate),
+            rangeStart: meta ? meta.rangeStart : 0,
+            rangeEnd: meta ? meta.rangeEnd : 24 * 60,
+            minute: minute
+        };
+    }
+
+    function showDailyContextMenu(event, item, cell) {
+        var menu = byId("daily-context-menu");
+        var documentWidth = document.documentElement.clientWidth;
+        var documentHeight = document.documentElement.clientHeight;
+        var left;
+        var top;
+        if (item) {
+            selectDailyItem(item, findParentByClass(event.srcElement || event.target, "daily-event-bar"));
+        }
+        if (cell) {
+            dailyInteraction.target = getDailyTarget(cell, event.clientX, false);
+        } else if (item) {
+            dailyInteraction.target = getItemTarget(item, findParentByClass(event.srcElement || event.target, "daily-timeline-cell"));
+        }
+        byId("daily-menu-copy").disabled = !getSelectedDailyItem();
+        byId("daily-menu-cut").disabled = !getSelectedDailyItem() || service.isReadOnly();
+        byId("daily-menu-paste").disabled = !dailyInteraction.clipboard || !dailyInteraction.target || service.isReadOnly();
+        menu.style.display = "block";
+        left = Math.max(0, Math.min(event.clientX, documentWidth - menu.offsetWidth - 4));
+        top = Math.max(0, Math.min(event.clientY, documentHeight - menu.offsetHeight - 4));
+        menu.style.left = left + "px";
+        menu.style.top = top + "px";
+        return preventEvent(event);
+    }
+
+    function copySelectedDailyItem(cut) {
+        var item = getSelectedDailyItem();
+        if (!item) {
+            setMessage("コピーまたは切り取りする予定を選択してください。", true);
+            return false;
+        }
+        if (cut && service.isReadOnly()) {
+            setMessage("現在の接続先では予定を移動できません。", true);
+            return false;
+        }
+        dailyInteraction.clipboard = {
+            item: cloneScheduleItem(item),
+            cut: cut === true,
+            sourceId: String(item.id)
+        };
+        renderCurrentView();
+        setMessage("「" + item.title + "」を" + (cut ? "切り取りました。貼り付け先を右クリックしてください。" : "コピーしました。貼り付け先を右クリックしてください。"), false);
+        return true;
+    }
+
+    function persistDailyItem(item, createNew, successMessage, completed) {
+        var mode = service.getMode();
+        var sourceLabel = mode === "csv" ? "CSV" : "SharePoint";
+        if (service.isReadOnly()) {
+            setMessage("現在の接続先では予定を変更できません。", true);
+            return;
+        }
+        setConnectionStatus(sourceLabel + " 保存中", "");
+        (createNew ? service.create : service.update).call(service, item, function (savedItem, items) {
+            if (completed) {
+                completed(savedItem);
+            }
+            if (mode === "csv") {
+                state.items = items;
+                renderCurrentView();
+                setConnectionStatus("試験用CSV 編集中（未保存）", "connected");
+                setMessage(successMessage + " 再読込すると変更は消えます。", false);
+            } else {
+                reloadData(successMessage);
+            }
+        }, function (message) {
+            setConnectionStatus(sourceLabel + " 保存失敗", "error");
+            setMessage(message, true);
+        });
+    }
+
+    function moveItemToTarget(item, target) {
+        var changed = cloneScheduleItem(item);
+        var purpose = splitPurpose(changed.purpose || "");
+        var duration = changed.endDate.getTime() - changed.startDate.getTime();
+        var daySpan;
+        changed.purpose = joinPurpose(target.section, target.team, purpose.targets);
+        if (changed.allDay) {
+            daySpan = Math.max(0, Math.round((startOfDay(changed.endDate).getTime() -
+                startOfDay(changed.startDate).getTime()) / 86400000));
+            changed.startDate = new Date(target.day.getFullYear(), target.day.getMonth(), target.day.getDate());
+            changed.endDate = new Date(target.day.getFullYear(), target.day.getMonth(), target.day.getDate() + daySpan, 23, 59);
+        } else {
+            changed.startDate = new Date(
+                target.day.getFullYear(), target.day.getMonth(), target.day.getDate(),
+                Math.floor(target.minute / 60), target.minute % 60, 0, 0
+            );
+            changed.endDate = new Date(changed.startDate.getTime() + Math.max(duration, DAILY_SNAP_MINUTES * 60000));
+        }
+        return changed;
+    }
+
+    function pasteDailyItem() {
+        var clipboard = dailyInteraction.clipboard;
+        var source;
+        var changed;
+        if (!clipboard || !dailyInteraction.target) {
+            setMessage("コピー元と貼り付け先を指定してください。", true);
+            return false;
+        }
+        source = clipboard.cut ? (findItemById(clipboard.sourceId) || clipboard.item) : clipboard.item;
+        if (!source) {
+            setMessage("切り取った予定が見つかりません。もう一度操作してください。", true);
+            return false;
+        }
+        changed = moveItemToTarget(source, dailyInteraction.target);
+        if (clipboard.cut) {
+            persistDailyItem(changed, false, "予定を移動しました。", function () {
+                dailyInteraction.clipboard = null;
+                dailyInteraction.selectedItemId = String(changed.id);
+            });
+        } else {
+            changed.id = "";
+            changed.etag = "";
+            persistDailyItem(changed, true, "予定を貼り付けました。", null);
+        }
+        hideDailyContextMenu();
+        return true;
+    }
+
+    function getResizedDailyItem(item, edge, target) {
+        var changed = cloneScheduleItem(item);
+        var candidate = new Date(
+            target.day.getFullYear(), target.day.getMonth(), target.day.getDate(),
+            Math.floor(target.minute / 60), target.minute % 60, 0, 0
+        );
+        if (edge === "start") {
+            if (candidate.getTime() > changed.endDate.getTime() - DAILY_SNAP_MINUTES * 60000) {
+                throw new Error("開始時刻は終了時刻の15分以上前にしてください。");
+            }
+            changed.startDate = candidate;
+        } else {
+            if (candidate.getTime() < changed.startDate.getTime() + DAILY_SNAP_MINUTES * 60000) {
+                throw new Error("終了時刻は開始時刻の15分以上後にしてください。");
+            }
+            changed.endDate = candidate;
+        }
+        return changed;
+    }
+
+    function resizeDailyItem(item, edge, target) {
+        var changed;
+        try {
+            changed = getResizedDailyItem(item, edge, target);
+        } catch (error) {
+            setMessage(error.message, true);
+            return;
+        }
+        persistDailyItem(changed, false, edge === "start" ? "開始時刻を変更しました。" : "終了時刻を変更しました。", null);
+    }
+
+    function showDailyDropIndicator(target) {
+        var position;
+        if (dailyInteraction.indicator && dailyInteraction.indicator.parentNode) {
+            dailyInteraction.indicator.parentNode.removeChild(dailyInteraction.indicator);
+        }
+        dailyInteraction.indicator = document.createElement("span");
+        dailyInteraction.indicator.className = "daily-drop-indicator";
+        position = (target.minute - target.rangeStart) / (target.rangeEnd - target.rangeStart) * 100;
+        dailyInteraction.indicator.style.left = position + "%";
+        target.timeline.appendChild(dailyInteraction.indicator);
+    }
+
+    function beginDailyDrag(event, item, button, mode) {
+        if (service.isReadOnly() || (item.allDay && mode !== "move")) {
+            return;
+        }
+        selectDailyItem(item, button);
+        hideDailyContextMenu();
+        dailyInteraction.drag = {
+            item: item,
+            button: button,
+            cell: findParentByClass(button, "daily-timeline-cell"),
+            mode: mode,
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false,
+            target: null
+        };
+        return preventEvent(event);
+    }
+
+    function handleDailyDragMove(event) {
+        var drag = dailyInteraction.drag;
+        var cell;
+        var target;
+        if (!drag) {
+            return;
+        }
+        event = event || window.event;
+        if (!drag.moved && Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY) < 4) {
+            return;
+        }
+        drag.moved = true;
+        addClass(drag.button, "daily-event-dragging");
+        cell = drag.mode === "move" ? findParentByClass(document.elementFromPoint(event.clientX, event.clientY), "daily-timeline-cell") : drag.cell;
+        target = getDailyTarget(cell, event.clientX, drag.mode !== "move");
+        if (target) {
+            drag.target = target;
+            showDailyDropIndicator(target);
+        } else {
+            drag.target = null;
+            if (dailyInteraction.indicator && dailyInteraction.indicator.parentNode) {
+                dailyInteraction.indicator.parentNode.removeChild(dailyInteraction.indicator);
+            }
+            dailyInteraction.indicator = null;
+        }
+        return preventEvent(event);
+    }
+
+    function handleDailyDragEnd(event) {
+        var drag = dailyInteraction.drag;
+        var changed;
+        if (!drag) {
+            return;
+        }
+        if (dailyInteraction.indicator && dailyInteraction.indicator.parentNode) {
+            dailyInteraction.indicator.parentNode.removeChild(dailyInteraction.indicator);
+        }
+        dailyInteraction.indicator = null;
+        removeClass(drag.button, "daily-event-dragging");
+        dailyInteraction.drag = null;
+        if (!drag.moved || !drag.target) {
+            return;
+        }
+        dailyInteraction.suppressItemId = String(drag.item.id);
+        if (drag.mode === "move") {
+            changed = moveItemToTarget(drag.item, drag.target);
+            persistDailyItem(changed, false, "予定を移動しました。", null);
+        } else {
+            resizeDailyItem(drag.item, drag.mode, drag.target);
+        }
+        return preventEvent(event);
+    }
+
+    function isFormInput(element) {
+        var tagName = element && element.tagName ? element.tagName.toLowerCase() : "";
+        return tagName === "input" || tagName === "textarea" || tagName === "select" ||
+            (element && element.isContentEditable);
     }
 
     function createEventButton(item, day) {
@@ -394,6 +765,22 @@
         return util.pad2(Math.floor(minutes / 60)) + util.pad2(minutes % 60);
     }
 
+    function getDailyCaptionText(item) {
+        return item.title + (item.location ? "（" + item.location + "）" : "");
+    }
+
+    function estimateDailyCaptionPixels(item) {
+        var text = getDailyCaptionText(item);
+        var width = 16;
+        var code;
+        var i;
+        for (i = 0; i < text.length; i += 1) {
+            code = text.charCodeAt(i);
+            width += code <= 255 ? (text.charAt(i) === " " ? 4 : 7) : 13;
+        }
+        return Math.max(120, width);
+    }
+
     function getDailyItemRange(item, day, rangeStart, rangeEnd) {
         if (item.allDay) { return {start: rangeStart, end: rangeEnd}; }
         var endDate = item.endDate || item.startDate;
@@ -423,17 +810,29 @@
         var left = (displayRange.start - rangeStart) / totalMinutes * 100;
         var width = (displayRange.end - displayRange.start) / totalMinutes * 100;
         var displayDuration = displayRange.end - displayRange.start;
+        var lineLeft = (itemRange.start - displayRange.start) / displayDuration * 100;
+        var lineWidth = (itemRange.end - itemRange.start) / displayDuration * 100;
+        var lineEnd = lineLeft + lineWidth;
         var button = document.createElement("button");
         var times = document.createElement("span");
         var start = document.createElement("span");
         var end = document.createElement("span");
         var line = document.createElement("span");
         var caption = document.createElement("span");
+        var startHandle;
+        var endHandle;
 
         button.type = "button";
         button.className = "daily-event-bar";
         if (displayRange.start !== itemRange.start || displayRange.end !== itemRange.end) {
             button.className += " daily-event-short";
+        }
+        if (dailyInteraction.selectedItemId === String(item.id)) {
+            button.className += " daily-event-selected";
+        }
+        if (dailyInteraction.clipboard && dailyInteraction.clipboard.cut &&
+                dailyInteraction.clipboard.sourceId === String(item.id)) {
+            button.className += " daily-event-cut";
         }
         button.style.left = left + "%";
         button.style.width = width + "%";
@@ -443,18 +842,30 @@
 
         times.className = "daily-event-times";
         start.className = "daily-event-start";
+        start.style.left = lineLeft + "%";
         start.appendChild(document.createTextNode(formatDailyTime(itemRange.start)));
         end.className = "daily-event-end";
+        end.style.right = (100 - lineEnd) + "%";
         end.appendChild(document.createTextNode(formatDailyTime(itemRange.end)));
+        if (lineWidth < 45) {
+            if (itemRange.start > rangeStart) {
+                start.className += " daily-event-time-before";
+            }
+            if (itemRange.end < rangeEnd) {
+                end.className += " daily-event-time-after";
+                end.style.right = "auto";
+                end.style.left = lineEnd + "%";
+            }
+        }
         times.appendChild(start);
         times.appendChild(end);
 
         line.className = "daily-event-line";
         // Text may need extra room, but the line must follow the actual time axis.
-        line.style.left = ((itemRange.start - displayRange.start) / displayDuration * 100) + "%";
-        line.style.width = ((itemRange.end - itemRange.start) / displayDuration * 100) + "%";
+        line.style.left = lineLeft + "%";
+        line.style.width = lineWidth + "%";
         caption.className = "daily-event-caption";
-        caption.appendChild(document.createTextNode(item.title + (item.location ? "（" + item.location + "）" : "")));
+        caption.appendChild(document.createTextNode(getDailyCaptionText(item)));
 
         button.appendChild(times);
         button.appendChild(line);
@@ -462,11 +873,49 @@
         if (item.allDay) {
             button.removeChild(times);
             button.title = item.title + " / 終日" + (item.location ? " / " + item.location : "");
+        } else {
+            startHandle = document.createElement("span");
+            startHandle.className = "daily-resize-handle daily-resize-start screen-only";
+            startHandle.style.left = lineLeft + "%";
+            startHandle.title = "ドラッグして開始時刻を変更";
+            endHandle = document.createElement("span");
+            endHandle.className = "daily-resize-handle daily-resize-end screen-only";
+            endHandle.style.left = lineEnd + "%";
+            endHandle.title = "ドラッグして終了時刻を変更";
+            button.appendChild(startHandle);
+            button.appendChild(endHandle);
         }
         button.onclick = function (event) {
+            var source = (event || window.event).srcElement || (event || window.event).target;
             stopEvent(event);
+            if (hasClass(source, "daily-resize-handle")) {
+                return false;
+            }
+            if (dailyInteraction.suppressItemId === String(item.id)) {
+                dailyInteraction.suppressItemId = "";
+                return false;
+            }
+            selectDailyItem(item, button);
             openEditor(item);
             return false;
+        };
+        button.onfocus = function () {
+            selectDailyItem(item, button);
+        };
+        button.onmousedown = function (event) {
+            var source = (event || window.event).srcElement || (event || window.event).target;
+            if (hasClass(source, "daily-resize-start")) {
+                return beginDailyDrag(event || window.event, item, button, "start");
+            }
+            if (hasClass(source, "daily-resize-end")) {
+                return beginDailyDrag(event || window.event, item, button, "end");
+            }
+            if (hasClass(source, "daily-event-caption") || source === button) {
+                return beginDailyDrag(event || window.event, item, button, "move");
+            }
+        };
+        button.oncontextmenu = function (event) {
+            return showDailyContextMenu(event || window.event, item, findParentByClass(button, "daily-timeline-cell"));
         };
         return button;
     }
@@ -491,6 +940,8 @@
         var itemRange;
         var visualDuration;
         var minimumVisualDuration;
+        var minimumVisualPixels;
+        var maximumCaptionPixels = 120;
         var visualStart;
         var visualEnd;
         var itemMinutes;
@@ -531,6 +982,7 @@
         byId("print-heading").innerHTML = formatJapaneseDate(day, true) + "　日々予定表";
 
         for (i = 0; i < items.length; i += 1) {
+            maximumCaptionPixels = Math.max(maximumCaptionPixels, estimateDailyCaptionPixels(items[i]));
             if (items[i].allDay) { continue; }
             if (sameDate(items[i].startDate, day)) {
                 itemMinutes = items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes();
@@ -567,7 +1019,10 @@
         headerCell.appendChild(axis);
         headerRow.appendChild(headerCell);
         head.appendChild(headerRow);
-        table.style.minWidth = (155 + Math.ceil(totalMinutes / slotMinutes) * 88) + "px";
+        table.style.minWidth = (155 + Math.max(
+            Math.ceil(totalMinutes / slotMinutes) * 88,
+            maximumCaptionPixels
+        )) + "px";
 
         blocks = getOrganizationBlocks("daily", [day]);
         for (i = 0; i < blocks.length; i += 1) {
@@ -576,7 +1031,11 @@
             laneEnds = [];
             for (j = 0; j < blockItems.length; j += 1) {
                 itemRange = getDailyItemRange(blockItems[j], day, rangeStart, rangeEnd);
-                minimumVisualDuration = Math.ceil(slotMinutes * 120 / 88);
+                minimumVisualPixels = estimateDailyCaptionPixels(blockItems[j]);
+                minimumVisualDuration = Math.min(
+                    totalMinutes,
+                    Math.ceil(slotMinutes * minimumVisualPixels / 88)
+                );
                 visualDuration = Math.max(itemRange.end - itemRange.start, minimumVisualDuration);
                 visualStart = itemRange.start - (visualDuration - (itemRange.end - itemRange.start)) / 2;
                 visualEnd = visualStart + visualDuration;
@@ -610,10 +1069,18 @@
 
             timelineCell = document.createElement("td");
             timelineCell.className = "daily-timeline-cell clickable-slot";
-            timelineCell.title = blocks[i].label + "の時間帯をクリックして予定を追加";
+            timelineCell.title = blocks[i].label + "の時間帯をクリックして予定を追加。右クリックで貼り付け";
             timeline = document.createElement("div");
             timeline.className = "daily-timeline";
             timeline.style.height = (rowCount * 52 + 8) + "px";
+            timelineCell._dailyMeta = {
+                timeline: timeline,
+                section: blocks[i].section,
+                team: blocks[i].team,
+                day: new Date(day.getTime()),
+                rangeStart: rangeStart,
+                rangeEnd: rangeEnd
+            };
             appendDailyGridLines(timeline, rangeStart, rangeEnd, slotMinutes);
             for (j = 0; j < placedItems.length; j += 1) {
                 timeline.appendChild(createDailyEventBar(
@@ -626,26 +1093,29 @@
                 ));
             }
             timelineCell.appendChild(timeline);
-            (function (cell, section, team, startMinute, endMinute, interval, targetDay) {
+            (function (cell, section, team, targetDay) {
                 cell.onclick = function (event) {
-                    var rect = cell.getBoundingClientRect();
                     var sourceEvent = event || window.event;
-                    var ratio = rect.width > 0 ? (sourceEvent.clientX - rect.left) / rect.width : 0;
-                    var selectedMinute = startMinute + Math.floor((ratio * (endMinute - startMinute)) / interval) * interval;
+                    var target = getDailyTarget(cell, sourceEvent.clientX, false);
                     var targetDate;
-                    selectedMinute = Math.max(startMinute, Math.min(endMinute - interval, selectedMinute));
+                    hideDailyContextMenu();
+                    dailyInteraction.target = target;
                     targetDate = new Date(
                         targetDay.getFullYear(),
                         targetDay.getMonth(),
                         targetDay.getDate(),
-                        Math.floor(selectedMinute / 60),
-                        selectedMinute % 60,
+                        Math.floor(target.minute / 60),
+                        target.minute % 60,
                         0,
                         0
                     );
                     openEditor(null, targetDate, true, {section: section, team: team});
                 };
-            }(timelineCell, blocks[i].section, blocks[i].team, rangeStart, rangeEnd, slotMinutes, day));
+                cell.oncontextmenu = function (event) {
+                    selectDailyItem(null, null);
+                    return showDailyContextMenu(event || window.event, null, cell);
+                };
+            }(timelineCell, blocks[i].section, blocks[i].team, day));
             row.appendChild(timelineCell);
             body.appendChild(row);
         }
@@ -1013,6 +1483,10 @@
 
     function switchMode(mode) {
         closeEditor();
+        dailyInteraction.selectedItemId = "";
+        dailyInteraction.clipboard = null;
+        dailyInteraction.target = null;
+        hideDailyContextMenu();
         service.setMode(mode);
         storeMode(mode);
         updateSourceControls();
@@ -1226,6 +1700,11 @@
             return;
         }
         closeEditor();
+        hideDailyContextMenu();
+        dailyInteraction.target = null;
+        if (mode !== "daily") {
+            dailyInteraction.selectedItemId = "";
+        }
         state.viewMode = mode;
         if (mode === "monthly") {
             state.displayMonth = new Date(state.displayDate.getFullYear(), state.displayDate.getMonth(), 1);
@@ -1237,6 +1716,9 @@
     }
 
     function moveView(amount) {
+        hideDailyContextMenu();
+        dailyInteraction.target = null;
+        dailyInteraction.selectedItemId = "";
         if (state.viewMode === "daily") {
             state.displayDate = new Date(state.displayDate.getFullYear(), state.displayDate.getMonth(), state.displayDate.getDate() + amount);
         } else if (state.viewMode === "weekly") {
@@ -1253,6 +1735,9 @@
 
     function goCurrentPeriod() {
         var today = startOfDay(new Date());
+        hideDailyContextMenu();
+        dailyInteraction.target = null;
+        dailyInteraction.selectedItemId = "";
         state.displayDate = today;
         state.displayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
         renderCurrentView();
@@ -1302,8 +1787,40 @@
         util.addEvent(byId("new-event"), "click", function () {
             openEditor(null, state.displayDate);
         });
+        util.addEvent(byId("daily-menu-copy"), "click", function () {
+            copySelectedDailyItem(false);
+            hideDailyContextMenu();
+        });
+        util.addEvent(byId("daily-menu-cut"), "click", function () {
+            copySelectedDailyItem(true);
+            hideDailyContextMenu();
+        });
+        util.addEvent(byId("daily-menu-paste"), "click", function () {
+            pasteDailyItem();
+        });
+        util.addEvent(document, "mousemove", handleDailyDragMove);
+        util.addEvent(document, "mouseup", handleDailyDragEnd);
+        util.addEvent(document, "click", function (event) {
+            var target = (event || window.event).srcElement || (event || window.event).target;
+            if (!findParentByClass(target, "daily-context-menu")) {
+                hideDailyContextMenu();
+            }
+        });
         util.addEvent(document, "keydown", function (event) {
+            var handled = false;
             event = event || window.event;
+            if (event.ctrlKey && !event.altKey && !isFormInput(event.srcElement || event.target) && state.viewMode === "daily") {
+                if (event.keyCode === 67) {
+                    handled = copySelectedDailyItem(false);
+                } else if (event.keyCode === 88) {
+                    handled = copySelectedDailyItem(true);
+                } else if (event.keyCode === 86) {
+                    handled = pasteDailyItem();
+                }
+                if (handled) {
+                    return preventEvent(event);
+                }
+            }
             if (event.ctrlKey && event.keyCode === 80) {
                 if (event.preventDefault) {
                     event.preventDefault();
@@ -1312,10 +1829,22 @@
                 printCurrentView();
                 return false;
             }
-            if (event.keyCode === 27 && byId("event-editor").style.display !== "none") {
-                closeEditor();
+            if (event.keyCode === 27) {
+                hideDailyContextMenu();
+                if (dailyInteraction.drag) {
+                    removeClass(dailyInteraction.drag.button, "daily-event-dragging");
+                    dailyInteraction.drag = null;
+                    if (dailyInteraction.indicator && dailyInteraction.indicator.parentNode) {
+                        dailyInteraction.indicator.parentNode.removeChild(dailyInteraction.indicator);
+                    }
+                    dailyInteraction.indicator = null;
+                }
+                if (byId("event-editor").style.display !== "none") {
+                    closeEditor();
+                }
             }
         });
+        util.addEvent(window, "scroll", hideDailyContextMenu);
         util.addEvent(window, "afterprint", resetPrintLayout);
         util.addEvent(byId("cancel-edit"), "click", closeEditor);
         util.addEvent(byId("delete-event"), "click", deleteEvent);

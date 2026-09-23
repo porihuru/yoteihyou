@@ -276,7 +276,7 @@ test("日々表示が組織縦・時刻横の時間枠を使用する", function
     assert.ok(appSource.indexOf('getOrganizationBlocks("daily"') >= 0);
     assert.ok(appSource.indexOf("function createDailyEventBar") >= 0);
     assert.ok(appSource.indexOf('button.className += " daily-event-short"') >= 0);
-    assert.ok(appSource.indexOf("minimumVisualDuration = Math.ceil(slotMinutes * 120 / 88)") >= 0);
+    assert.ok(appSource.indexOf("minimumVisualPixels = estimateDailyCaptionPixels") >= 0);
     assert.ok(appSource.indexOf("displayRange: {start: visualStart, end: visualEnd}") >= 0);
     assert.ok(appSource.indexOf('line.className = "daily-event-line"') >= 0);
     assert.ok(appSource.indexOf('caption.className = "daily-event-caption"') >= 0);
@@ -294,10 +294,12 @@ test("短時間予定の横線は文字枠を広げても実時刻に一致す�
             createTextNode: function (value) { return value; }
         },
         util: util,
-        formatDailyTime: function (value) { return String(value); }
+        formatDailyTime: function (value) { return String(value); },
+        dailyInteraction: {selectedItemId: "", clipboard: null}
     });
-    vm.runInContext(source.slice(source.indexOf("    function createDailyEventBar("),
+    vm.runInContext(source.slice(source.indexOf("    function getDailyCaptionText("),
         source.indexOf("    function renderDaily(")), scope);
+    assert.ok(scope.estimateDailyCaptionPixels({title: "非常に長い会議件名", location: "第一会議室"}) > 120);
     [
         {actual: {start: 420, end: 430}, display: {start: 384, end: 466}},
         {actual: {start: 360, end: 370}, display: {start: 360, end: 442}},
@@ -344,6 +346,97 @@ test("SharePointの終日フラグを保存して読み戻せる", function () {
     assert.strictEqual(source.toItem(payload).allDay, true);
     payload.AllDay = false;
     assert.strictEqual(source.toItem(payload).allDay, false);
+});
+
+test("日々予定の移動と前後時刻の変更を15分単位で反映できる", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({
+        Date: Date,
+        Math: Math,
+        DAILY_SNAP_MINUTES: 15,
+        service: {getMode: function () { return "csv"; }},
+        splitPurpose: function () { return {targets: ["daily", "weekly"]}; },
+        joinPurpose: function (section, team, targets) { return section + "/" + team + "/" + targets.join(","); },
+        startOfDay: function (date) { return new Date(date.getFullYear(), date.getMonth(), date.getDate()); }
+    });
+    var item = {
+        id: 1,
+        etag: "etag",
+        title: "会議",
+        startDate: new Date(2026, 8, 23, 9, 0),
+        endDate: new Date(2026, 8, 23, 10, 0),
+        purpose: "GP1",
+        isActive: true
+    };
+    var target = {day: new Date(2026, 8, 24), minute: 10 * 60 + 30, section: "GP2", team: "A班"};
+    var moved;
+    var resized;
+    vm.runInContext(appSource.slice(appSource.indexOf("    function cloneScheduleItem("),
+        appSource.indexOf("    function createEventButton(")), scope);
+    moved = scope.moveItemToTarget(item, target);
+    assert.strictEqual(moved.startDate.getTime(), new Date(2026, 8, 24, 10, 30).getTime());
+    assert.strictEqual(moved.endDate.getTime(), new Date(2026, 8, 24, 11, 30).getTime());
+    assert.strictEqual(moved.purpose, "GP2/A班/daily,weekly");
+    resized = scope.getResizedDailyItem(item, "start", {day: new Date(2026, 8, 23), minute: 8 * 60 + 15});
+    assert.strictEqual(resized.startDate.getTime(), new Date(2026, 8, 23, 8, 15).getTime());
+    assert.throws(function () {
+        scope.getResizedDailyItem(item, "end", {day: new Date(2026, 8, 23), minute: 9 * 60});
+    }, /15分以上後/);
+});
+
+test("日々予定にドラッグ操作とコピー操作のUIがある", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+    assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "move")') >= 0);
+    assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "start")') >= 0);
+    assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "end")') >= 0);
+    assert.ok(appSource.indexOf("event.keyCode === 67") >= 0);
+    assert.ok(appSource.indexOf("event.keyCode === 88") >= 0);
+    assert.ok(appSource.indexOf("event.keyCode === 86") >= 0);
+    assert.ok(html.indexOf('id="daily-context-menu"') >= 0);
+});
+
+test("試験用CSVは9月と10月の全グループを毎日収録する", function () {
+    var generator = require(path.join(root, "scripts/generate-sample-schedule.js"));
+    var rows = generator.buildRows();
+    var csvText = fs.readFileSync(path.join(root, "data/schedule.csv"), "utf8");
+    var dailyCoverage = {};
+    var groupCounts = {};
+    var current = new Date(Date.UTC(2026, 8, 1));
+    var last = new Date(Date.UTC(2026, 9, 31));
+    var dateText;
+    var group;
+    var i;
+
+    rows.forEach(function (row) {
+        group = row.Purpose.split("｜")[0];
+        groupCounts[group] = (groupCounts[group] || 0) + 1;
+        dailyCoverage[row.EventDate.substring(0, 10) + "\u001f" + group] = true;
+    });
+
+    while (current.getTime() <= last.getTime()) {
+        dateText = current.getUTCFullYear() + "-" +
+            (current.getUTCMonth() + 1 < 10 ? "0" : "") + (current.getUTCMonth() + 1) + "-" +
+            (current.getUTCDate() < 10 ? "0" : "") + current.getUTCDate();
+        for (i = 0; i < generator.groups.length; i += 1) {
+            assert.strictEqual(dailyCoverage[dateText + "\u001f" + generator.groups[i]], true,
+                dateText + " " + generator.groups[i]);
+        }
+        current = new Date(current.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    assert.strictEqual(rows.length, 2198);
+    assert.strictEqual(csvText, generator.toCsv(rows));
+    assert.strictEqual(groupCounts.GP1, 63);
+    generator.busyGroups.forEach(function (busyGroup) {
+        assert.strictEqual(groupCounts[busyGroup], 244);
+    });
+    assert.ok(rows.some(function (row) {
+        return row.Title === "GP1 月またぎ計画" && row.EventDate < "2026-10-01" && row.EndDate >= "2026-10-01";
+    }));
+    assert.ok(rows.some(function (row) {
+        return row.Title === "GP1 週またぎ対応" && row.EventDate === "2026-10-09 13:00" && row.EndDate === "2026-10-13 12:00";
+    }));
 });
 
 process.stdout.write(passed + " tests passed\n");
