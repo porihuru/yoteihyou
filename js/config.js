@@ -10,6 +10,8 @@
         dailyView: {
             startHour: 6,
             endHour: 22,
+            standardStartHour: 7,
+            standardEndHour: 18,
             slotMinutes: 60,
             defaultStartHour: 9,
             defaultDurationMinutes: 60

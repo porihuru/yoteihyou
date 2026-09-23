@@ -272,6 +272,8 @@ test("日々表示が組織縦・時刻横の時間枠を使用する", function
     assert.ok(appSource.indexOf("dailyViewConfig.slotMinutes") >= 0);
     assert.ok(appSource.indexOf("dailyViewConfig.startHour") >= 0);
     assert.ok(appSource.indexOf("dailyViewConfig.endHour") >= 0);
+    assert.ok(appSource.indexOf("dailyViewConfig.standardStartHour") >= 0);
+    assert.ok(appSource.indexOf("dailyViewConfig.standardEndHour") >= 0);
     assert.ok(appSource.indexOf('createHeaderCell("グループ"') >= 0);
     assert.ok(appSource.indexOf('getOrganizationBlocks("daily"') >= 0);
     assert.ok(appSource.indexOf("function createDailyEventBar") >= 0);
@@ -282,6 +284,37 @@ test("日々表示が組織縦・時刻横の時間枠を使用する", function
     assert.ok(appSource.indexOf('caption.className = "daily-event-caption"') >= 0);
     assert.ok(html.indexOf('id="daily-head"') >= 0);
     assert.ok(html.indexOf("daily-horizontal-schedule") >= 0);
+});
+
+test("日々表示は通常7時から18時で必要な時間帯だけを広げる", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var day = new Date(2026, 8, 23);
+    var scope = vm.createContext({
+        Math: Math,
+        sameDate: function (left, right) {
+            return left.getFullYear() === right.getFullYear() &&
+                left.getMonth() === right.getMonth() && left.getDate() === right.getDate();
+        }
+    });
+    var start = appSource.indexOf("    function isDailyRangeTrigger(");
+    var end = appSource.indexOf("    function getDailyItemRange(");
+    var range;
+
+    vm.runInContext(appSource.slice(start, end), scope);
+    range = scope.getDailyDisplayRange([], day, 360, 1320, 420, 1080, 60);
+    assert.deepStrictEqual({start: range.start, end: range.end}, {start: 420, end: 1080});
+
+    range = scope.getDailyDisplayRange([
+        {startDate: new Date(2026, 8, 23, 6, 30), endDate: new Date(2026, 8, 23, 7, 15)},
+        {startDate: new Date(2026, 8, 23, 17, 30), endDate: new Date(2026, 8, 23, 19, 15)}
+    ], day, 360, 1320, 420, 1080, 60);
+    assert.deepStrictEqual({start: range.start, end: range.end}, {start: 360, end: 1200});
+
+    range = scope.getDailyDisplayRange([
+        {startDate: new Date(2026, 8, 22, 6, 0), endDate: new Date(2026, 8, 24, 20, 0)},
+        {allDay: true, startDate: new Date(2026, 8, 23, 0, 0), endDate: new Date(2026, 8, 23, 23, 59)}
+    ], day, 360, 1320, 420, 1080, 60);
+    assert.deepStrictEqual({start: range.start, end: range.end}, {start: 420, end: 1080});
 });
 
 test("短時間予定の横線は文字枠を広げても実時刻に一致する", function () {
@@ -386,6 +419,7 @@ test("日々予定の移動と前後時刻の変更を15分単位で反映でき
 
 test("日々予定にドラッグ操作とコピー操作のUIがある", function () {
     var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
     var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
     assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "move")') >= 0);
     assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "start")') >= 0);
@@ -394,6 +428,8 @@ test("日々予定にドラッグ操作とコピー操作のUIがある", functi
     assert.ok(appSource.indexOf("event.keyCode === 88") >= 0);
     assert.ok(appSource.indexOf("event.keyCode === 86") >= 0);
     assert.ok(html.indexOf('id="daily-context-menu"') >= 0);
+    assert.ok(/\.daily-resize-handle\s*\{[\s\S]*?border:\s*0;[\s\S]*?background:\s*transparent;/.test(css));
+    assert.ok(/\.daily-event-bar\.daily-event-selected \.daily-event-caption\s*\{[\s\S]*?outline:\s*0;/.test(css));
 });
 
 test("試験用CSVは9月と10月の全グループを毎日収録する", function () {

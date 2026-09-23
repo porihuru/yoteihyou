@@ -5,6 +5,8 @@
     var dailyViewConfig = config.dailyView || {
         startHour: 6,
         endHour: 22,
+        standardStartHour: 7,
+        standardEndHour: 18,
         slotMinutes: 60,
         defaultStartHour: 9,
         defaultDurationMinutes: 60
@@ -781,6 +783,43 @@
         return Math.max(120, width);
     }
 
+    function isDailyRangeTrigger(item, day) {
+        var endDate;
+        if (!item || item.allDay || !item.startDate) {
+            return false;
+        }
+        endDate = item.endDate || item.startDate;
+        return sameDate(item.startDate, day) && sameDate(endDate, day);
+    }
+
+    function getDailyDisplayRange(items, day, minimumStart, maximumEnd, standardStart, standardEnd, slotMinutes) {
+        var rangeStart = standardStart;
+        var rangeEnd = standardEnd;
+        var itemMinutes;
+        var endDate;
+        var i;
+
+        for (i = 0; i < items.length; i += 1) {
+            if (!isDailyRangeTrigger(items[i], day)) {
+                continue;
+            }
+            itemMinutes = items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes();
+            if (itemMinutes < standardStart) {
+                rangeStart = Math.min(rangeStart, Math.floor(itemMinutes / slotMinutes) * slotMinutes);
+            }
+            endDate = items[i].endDate || items[i].startDate;
+            itemMinutes = endDate.getHours() * 60 + endDate.getMinutes();
+            if (itemMinutes > standardEnd) {
+                rangeEnd = Math.max(rangeEnd, Math.ceil(itemMinutes / slotMinutes) * slotMinutes);
+            }
+        }
+
+        return {
+            start: Math.max(minimumStart, rangeStart),
+            end: Math.min(maximumEnd, Math.max(rangeStart + slotMinutes, rangeEnd))
+        };
+    }
+
     function getDailyItemRange(item, day, rangeStart, rangeEnd) {
         if (item.allDay) { return {start: rangeStart, end: rangeEnd}; }
         var endDate = item.endDate || item.startDate;
@@ -929,6 +968,9 @@
         var slotMinutes = parseInt(dailyViewConfig.slotMinutes, 10);
         var startHour = parseInt(dailyViewConfig.startHour, 10);
         var endHour = parseInt(dailyViewConfig.endHour, 10);
+        var standardStartHour = parseInt(dailyViewConfig.standardStartHour, 10);
+        var standardEndHour = parseInt(dailyViewConfig.standardEndHour, 10);
+        var displayRange;
         var rangeStart;
         var rangeEnd;
         var totalMinutes;
@@ -944,8 +986,6 @@
         var maximumCaptionPixels = 120;
         var visualStart;
         var visualEnd;
-        var itemMinutes;
-        var endDate;
         var laneIndex;
         var headerRow;
         var headerCell;
@@ -972,8 +1012,27 @@
             startHour = 6;
             endHour = 22;
         }
-        rangeStart = startHour * 60;
-        rangeEnd = endHour * 60;
+        if (isNaN(standardStartHour) || standardStartHour < startHour || standardStartHour >= endHour) {
+            standardStartHour = Math.max(startHour, 7);
+        }
+        if (isNaN(standardEndHour) || standardEndHour <= standardStartHour || standardEndHour > endHour) {
+            standardEndHour = Math.min(endHour, 18);
+        }
+        if (standardEndHour <= standardStartHour) {
+            standardStartHour = startHour;
+            standardEndHour = endHour;
+        }
+        displayRange = getDailyDisplayRange(
+            items,
+            day,
+            startHour * 60,
+            endHour * 60,
+            standardStartHour * 60,
+            standardEndHour * 60,
+            slotMinutes
+        );
+        rangeStart = displayRange.start;
+        rangeEnd = displayRange.end;
 
         while (body.firstChild) {
             body.removeChild(body.firstChild);
@@ -983,20 +1042,7 @@
 
         for (i = 0; i < items.length; i += 1) {
             maximumCaptionPixels = Math.max(maximumCaptionPixels, estimateDailyCaptionPixels(items[i]));
-            if (items[i].allDay) { continue; }
-            if (sameDate(items[i].startDate, day)) {
-                itemMinutes = items[i].startDate.getHours() * 60 + items[i].startDate.getMinutes();
-                rangeStart = Math.min(rangeStart, Math.floor(itemMinutes / slotMinutes) * slotMinutes);
-            }
-            endDate = items[i].endDate || items[i].startDate;
-            if (sameDate(endDate, day)) {
-                itemMinutes = endDate.getHours() * 60 + endDate.getMinutes();
-                rangeEnd = Math.max(rangeEnd, Math.ceil(itemMinutes / slotMinutes) * slotMinutes);
-            }
         }
-
-        rangeStart = Math.max(0, rangeStart);
-        rangeEnd = Math.min(24 * 60, Math.max(rangeStart + slotMinutes, rangeEnd));
         totalMinutes = rangeEnd - rangeStart;
 
         while (head.firstChild) {

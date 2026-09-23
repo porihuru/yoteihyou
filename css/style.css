@@ -410,8 +410,7 @@ body.editor-open .app-shell {
 }
 
 .daily-event-bar.daily-event-selected .daily-event-caption {
-    outline: 2px solid #e07b18;
-    outline-offset: 1px;
+    outline: 0;
 }
 
 .daily-event-bar.daily-event-cut {
@@ -426,11 +425,11 @@ body.editor-open .app-shell {
     position: absolute;
     z-index: 4;
     top: 11px;
-    width: 10px;
-    height: 12px;
-    margin-left: -5px;
-    border: 1px solid #176aa4;
-    background: #fff;
+    width: 12px;
+    height: 16px;
+    margin-left: -6px;
+    border: 0;
+    background: transparent;
     box-sizing: border-box;
     cursor: ew-resize;
 }
