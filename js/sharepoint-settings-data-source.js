@@ -33,6 +33,7 @@
             monthlyRows: numberOrDefault(row[f.monthlyRows], 1),
             weeklyRows: numberOrDefault(row[f.weeklyRows], 1),
             dailyRows: numberOrDefault(row[f.dailyRows], 1),
+            autoRows: !f.autoRows || row[f.autoRows] !== false,
             sortOrder: numberOrDefault(row[f.sortOrder], 0),
             isActive: row[f.isActive] !== false
         };
@@ -50,7 +51,11 @@
             f.dailyRows,
             f.sortOrder,
             f.isActive
-        ].join(",");
+        ];
+        if (f.autoRows) {
+            select.splice(6, 0, f.autoRows);
+        }
+        select = select.join(",");
         var url;
         var items = [];
 
@@ -100,6 +105,9 @@
         payload[f.monthlyRows] = item.monthlyRows;
         payload[f.weeklyRows] = item.weeklyRows;
         payload[f.dailyRows] = item.dailyRows;
+        if (f.autoRows) {
+            payload[f.autoRows] = item.autoRows !== false;
+        }
         payload[f.sortOrder] = item.sortOrder;
         payload[f.isActive] = item.isActive !== false;
         return payload;
@@ -205,17 +213,20 @@
                     delete group.monthlyRows;
                     delete group.weeklyRows;
                     delete group.dailyRows;
+                    delete group.autoRows;
                 }
                 group.teams.push({
                     name: item.teamName,
                     monthlyRows: item.monthlyRows,
                     weeklyRows: item.weeklyRows,
-                    dailyRows: item.dailyRows
+                    dailyRows: item.dailyRows,
+                    autoRows: item.autoRows !== false
                 });
             } else if (!group.teams) {
                 group.monthlyRows = item.monthlyRows;
                 group.weeklyRows = item.weeklyRows;
                 group.dailyRows = item.dailyRows;
+                group.autoRows = item.autoRows !== false;
             }
         }
         return {

@@ -42,6 +42,7 @@
                     monthlyRows: "MonthlyRows",
                     weeklyRows: "WeeklyRows",
                     dailyRows: "DailyRows",
+                    autoRows: "AutoRows",
                     sortOrder: "SortOrder",
                     isActive: "IsActive"
                 }

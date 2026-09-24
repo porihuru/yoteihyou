@@ -54,7 +54,7 @@
         if (this.items.length === 0) {
             row = document.createElement("tr");
             actionCell = createCell("設定がありません。下のフォームから追加してください。");
-            actionCell.colSpan = 8;
+            actionCell.colSpan = 9;
             actionCell.className = "empty-schedule";
             row.appendChild(actionCell);
             body.appendChild(row);
@@ -71,6 +71,7 @@
             row.appendChild(createCell(item.monthlyRows));
             row.appendChild(createCell(item.weeklyRows));
             row.appendChild(createCell(item.dailyRows));
+            row.appendChild(createCell(item.autoRows === false ? "固定" : "自動"));
             row.appendChild(createCell(item.sortOrder));
             row.appendChild(createCell(item.isActive === false ? "無効" : "有効"));
             actionCell = document.createElement("td");
@@ -97,6 +98,7 @@
         byId("setting-monthly-rows").value = "5";
         byId("setting-weekly-rows").value = "5";
         byId("setting-daily-rows").value = "5";
+        byId("setting-auto-rows").checked = true;
         byId("setting-sort-order").value = "0";
         byId("setting-active").checked = true;
         byId("settings-form-title").innerHTML = "設定を追加";
@@ -111,6 +113,7 @@
         byId("setting-monthly-rows").value = item.monthlyRows;
         byId("setting-weekly-rows").value = item.weeklyRows;
         byId("setting-daily-rows").value = item.dailyRows;
+        byId("setting-auto-rows").checked = item.autoRows !== false;
         byId("setting-sort-order").value = item.sortOrder;
         byId("setting-active").checked = item.isActive !== false;
         byId("settings-form-title").innerHTML = "設定を編集";
@@ -135,6 +138,7 @@
             monthlyRows: this.readPositiveNumber("setting-monthly-rows", "月間行数"),
             weeklyRows: this.readPositiveNumber("setting-weekly-rows", "週間行数"),
             dailyRows: this.readPositiveNumber("setting-daily-rows", "日々行数"),
+            autoRows: byId("setting-auto-rows").checked,
             sortOrder: parseInt(byId("setting-sort-order").value, 10),
             isActive: byId("setting-active").checked
         };

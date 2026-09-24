@@ -35,6 +35,10 @@
         indicator: null,
         suppressItemId: ""
     };
+    var organizationCollapseState = {
+        sections: {},
+        blocks: {}
+    };
 
     function byId(id) {
         return document.getElementById(id);
@@ -112,7 +116,8 @@
 
     function startOfWeek(date) {
         var day = startOfDay(date);
-        return new Date(day.getFullYear(), day.getMonth(), day.getDate() - day.getDay());
+        var daysFromMonday = (day.getDay() + 6) % 7;
+        return new Date(day.getFullYear(), day.getMonth(), day.getDate() - daysFromMonday);
     }
 
     function formatJapaneseDate(date, includeYear) {
@@ -578,8 +583,99 @@
         return isNaN(value) || value < 1 ? 1 : value;
     }
 
+    function getRenderedRowCount(block, requiredRows) {
+        var configuredRows = block && block.rowCount ? block.rowCount : 1;
+        var minimumRows = block && block.autoRows === false ? configuredRows : 1;
+        return Math.max(minimumRows, requiredRows || 0, 1);
+    }
+
     function getOrganizationKey(section, team) {
         return String(section || "") + "\u001f" + String(team || "");
+    }
+
+    function getOrganizationSectionsFromBlocks(blocks) {
+        var sections = [];
+        var byName = {};
+        var key;
+        var section;
+        var i;
+        for (i = 0; i < blocks.length; i += 1) {
+            key = "section:" + blocks[i].section;
+            section = byName[key];
+            if (!section) {
+                section = {
+                    name: blocks[i].section,
+                    blocks: [],
+                    hasTeams: false
+                };
+                byName[key] = section;
+                sections.push(section);
+            }
+            section.blocks.push(blocks[i]);
+            if (blocks[i].team) {
+                section.hasTeams = true;
+            }
+        }
+        return sections;
+    }
+
+    function isOrganizationSectionCollapsed(section) {
+        return organizationCollapseState.sections["section:" + section] === true;
+    }
+
+    function isOrganizationBlockCollapsed(section, team) {
+        return organizationCollapseState.blocks["block:" + getOrganizationKey(section, team)] === true;
+    }
+
+    function toggleOrganizationSection(section) {
+        var key = "section:" + section;
+        organizationCollapseState.sections[key] = !organizationCollapseState.sections[key];
+        renderCurrentView();
+    }
+
+    function toggleOrganizationBlock(section, team) {
+        var key = "block:" + getOrganizationKey(section, team);
+        organizationCollapseState.blocks[key] = !organizationCollapseState.blocks[key];
+        renderCurrentView();
+    }
+
+    function appendOrganizationName(cell, text, collapsed, section, team, sectionToggle) {
+        var button = document.createElement("button");
+        var label = document.createElement("span");
+        button.type = "button";
+        button.className = "organization-collapse-button screen-only";
+        button.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        button.title = text + (collapsed ? "を展開" : "を最小化");
+        button.appendChild(document.createTextNode(collapsed ? "＋" : "－"));
+        button.onclick = function (event) {
+            stopEvent(event);
+            if (sectionToggle) {
+                toggleOrganizationSection(section);
+            } else {
+                toggleOrganizationBlock(section, team);
+            }
+            return false;
+        };
+        label.className = "organization-name-label";
+        label.appendChild(document.createTextNode(text));
+        cell.appendChild(button);
+        cell.appendChild(label);
+    }
+
+    function appendOrganizationSectionRow(body, section, columnCount) {
+        var collapsed = isOrganizationSectionCollapsed(section.name);
+        var row = document.createElement("tr");
+        var nameCell = document.createElement("th");
+        var scheduleCell = document.createElement("td");
+        row.className = "organization-section-row" + (collapsed ? " organization-collapsed" : "");
+        nameCell.className = "organization-name organization-section-name";
+        appendOrganizationName(nameCell, section.name, collapsed, section.name, "", true);
+        scheduleCell.className = "organization-section-cell";
+        scheduleCell.colSpan = columnCount;
+        scheduleCell.appendChild(document.createTextNode("\u00a0"));
+        row.appendChild(nameCell);
+        row.appendChild(scheduleCell);
+        body.appendChild(row);
     }
 
     function getConfiguredOrganizationBlocks(viewMode) {
@@ -595,7 +691,8 @@
                     section: groups[i].name,
                     team: "",
                     label: groups[i].name,
-                    rowCount: getConfiguredRowCount(groups[i], viewMode)
+                    rowCount: getConfiguredRowCount(groups[i], viewMode),
+                    autoRows: groups[i].autoRows !== false
                 });
             } else {
                 for (j = 0; j < teams.length; j += 1) {
@@ -603,7 +700,8 @@
                         section: groups[i].name,
                         team: teams[j].name,
                         label: joinOrganization(groups[i].name, teams[j].name),
-                        rowCount: getConfiguredRowCount(teams[j], viewMode)
+                        rowCount: getConfiguredRowCount(teams[j], viewMode),
+                        autoRows: teams[j].autoRows !== false
                     });
                 }
             }
@@ -641,7 +739,8 @@
                     section: purpose.section,
                     team: purpose.team,
                     label: joinOrganization(purpose.section, purpose.team) || "グループ未設定",
-                    rowCount: 1
+                    rowCount: 1,
+                    autoRows: true
                 });
                 configured[key] = true;
             }
@@ -696,6 +795,10 @@
 
     function renderOrganizationSchedule(viewMode, dates, head, body) {
         var blocks = getOrganizationBlocks(viewMode, dates);
+        var sections = getOrganizationSectionsFromBlocks(blocks);
+        var section;
+        var block;
+        var collapsed;
         var itemsByDate;
         var rowCount;
         var row;
@@ -703,48 +806,79 @@
         var scheduleCell;
         var date;
         var item;
-        var i;
         var j;
         var rowIndex;
+        var requiredRows;
+        var sectionIndex;
+        var blockIndex;
         renderOrganizationHeader(head, dates, viewMode);
         while (body.firstChild) {
             body.removeChild(body.firstChild);
         }
-        for (i = 0; i < blocks.length; i += 1) {
-            itemsByDate = [];
-            rowCount = blocks[i].rowCount;
-            for (j = 0; j < dates.length; j += 1) {
-                itemsByDate[j] = getItemsForOrganizationDay(blocks[i].section, blocks[i].team, dates[j], viewMode);
-                rowCount = Math.max(rowCount, itemsByDate[j].length);
+        for (sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+            section = sections[sectionIndex];
+            if (section.hasTeams) {
+                appendOrganizationSectionRow(body, section, dates.length);
+                if (isOrganizationSectionCollapsed(section.name)) {
+                    continue;
+                }
             }
-            for (rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
-                row = document.createElement("tr");
-                if (rowIndex === 0) {
-                    groupCell = document.createElement("th");
-                    groupCell.className = "organization-name";
-                    groupCell.rowSpan = rowCount;
-                    groupCell.appendChild(document.createTextNode(blocks[i].label));
-                    row.appendChild(groupCell);
-                }
+            for (blockIndex = 0; blockIndex < section.blocks.length; blockIndex += 1) {
+                block = section.blocks[blockIndex];
+                collapsed = isOrganizationBlockCollapsed(block.section, block.team);
+                itemsByDate = [];
+                requiredRows = 0;
                 for (j = 0; j < dates.length; j += 1) {
-                    date = new Date(dates[j].getTime());
-                    item = itemsByDate[j][rowIndex] || null;
-                    scheduleCell = document.createElement("td");
-                    scheduleCell.className = "organization-schedule-cell clickable-date";
-                    scheduleCell.title = formatJapaneseDate(date, true) + "の" + blocks[i].label + "に予定を追加";
-                    if (item) {
-                        scheduleCell.appendChild(createEventButton(item, date));
-                    } else {
-                        scheduleCell.appendChild(document.createTextNode("\u00a0"));
+                    itemsByDate[j] = collapsed ? [] :
+                        getItemsForOrganizationDay(block.section, block.team, dates[j], viewMode);
+                    if (!collapsed) {
+                        requiredRows = Math.max(requiredRows, itemsByDate[j].length);
                     }
-                    (function (cell, targetDate, section, team) {
-                        cell.onclick = function () {
-                            openEditor(null, targetDate, false, {section: section, team: team});
-                        };
-                    }(scheduleCell, date, blocks[i].section, blocks[i].team));
-                    row.appendChild(scheduleCell);
                 }
-                body.appendChild(row);
+                rowCount = collapsed ? 1 : getRenderedRowCount(block, requiredRows);
+                for (rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+                    row = document.createElement("tr");
+                    if (collapsed) {
+                        row.className = "organization-collapsed";
+                    }
+                    if (rowIndex === 0) {
+                        groupCell = document.createElement("th");
+                        groupCell.className = "organization-name" + (block.team ? " organization-team-name" : "");
+                        groupCell.rowSpan = rowCount;
+                        appendOrganizationName(
+                            groupCell,
+                            block.team || block.section,
+                            collapsed,
+                            block.section,
+                            block.team,
+                            false
+                        );
+                        row.appendChild(groupCell);
+                    }
+                    for (j = 0; j < dates.length; j += 1) {
+                        date = new Date(dates[j].getTime());
+                        item = itemsByDate[j][rowIndex] || null;
+                        scheduleCell = document.createElement("td");
+                        scheduleCell.className = "organization-schedule-cell" +
+                            (collapsed ? " organization-collapsed-cell" : " clickable-date");
+                        scheduleCell.title = collapsed ? "" :
+                            formatJapaneseDate(date, true) + "の" + block.label + "に予定を追加";
+                        if (item) {
+                            scheduleCell.appendChild(createEventButton(item, date));
+                        } else {
+                            scheduleCell.appendChild(document.createTextNode("\u00a0"));
+                        }
+                        if (!collapsed) {
+                            (function (cell, targetDate, sectionName, teamName) {
+                                cell.onclick = function () {
+                                    openEditor(null, targetDate, false, {section: sectionName, team: teamName});
+                                };
+                            }(scheduleCell, date, block.section, block.team));
+                        }
+                        row.appendChild(scheduleCell);
+                    }
+                    body.appendChild(row);
+                }
             }
         }
     }
@@ -844,7 +978,34 @@
         }
     }
 
-    function createDailyEventBar(item, itemRange, displayRange, rangeStart, rangeEnd, laneIndex) {
+    function getDailyLaneMetrics() {
+        var contentHeight = 37;
+        var bodyVerticalPadding = 1;
+        var eventHeight = contentHeight + bodyVerticalPadding * 2;
+        var laneGap = 2;
+        return {
+            contentHeight: contentHeight,
+            bodyVerticalPadding: bodyVerticalPadding,
+            eventHeight: eventHeight,
+            laneGap: laneGap,
+            laneHeight: eventHeight + laneGap
+        };
+    }
+
+    function getDailyGroupLayout(rowCount) {
+        var laneMetrics = getDailyLaneMetrics();
+        var groupBorderMargin = 2;
+        var scheduledAreaHeight;
+        rowCount = Math.max(rowCount, 1);
+        scheduledAreaHeight = rowCount * laneMetrics.eventHeight + (rowCount - 1) * laneMetrics.laneGap;
+        return {
+            scheduledAreaHeight: scheduledAreaHeight,
+            groupBorderMargin: groupBorderMargin,
+            timelineHeight: scheduledAreaHeight + groupBorderMargin * 2
+        };
+    }
+
+    function createDailyEventBar(item, itemRange, displayRange, rangeStart, rangeEnd, laneIndex, groupBorderMargin) {
         var totalMinutes = rangeEnd - rangeStart;
         var left = (displayRange.start - rangeStart) / totalMinutes * 100;
         var width = (displayRange.end - displayRange.start) / totalMinutes * 100;
@@ -858,6 +1019,7 @@
         var end = document.createElement("span");
         var line = document.createElement("span");
         var caption = document.createElement("span");
+        var laneMetrics = getDailyLaneMetrics();
         var startHandle;
         var endHandle;
 
@@ -875,7 +1037,10 @@
         }
         button.style.left = left + "%";
         button.style.width = width + "%";
-        button.style.top = (laneIndex * 52 + 5) + "px";
+        if (typeof groupBorderMargin !== "number") {
+            groupBorderMargin = getDailyGroupLayout(1).groupBorderMargin;
+        }
+        button.style.top = (groupBorderMargin + laneIndex * laneMetrics.laneHeight) + "px";
         button.title = item.title + " / " + util.formatDateTime(item.startDate) + "～" +
             util.formatDateTime(item.endDate || item.startDate) + (item.location ? " / " + item.location : "");
 
@@ -975,6 +1140,10 @@
         var rangeEnd;
         var totalMinutes;
         var blocks;
+        var sections;
+        var section;
+        var block;
+        var collapsed;
         var blockItems;
         var placedItems;
         var laneEnds;
@@ -987,6 +1156,7 @@
         var visualStart;
         var visualEnd;
         var laneIndex;
+        var groupLayout;
         var headerRow;
         var headerCell;
         var axis;
@@ -998,6 +1168,8 @@
         var minute;
         var i;
         var j;
+        var sectionIndex;
+        var blockIndex;
 
         if (isNaN(slotMinutes) || slotMinutes < 1 || slotMinutes > 24 * 60) {
             slotMinutes = 60;
@@ -1071,99 +1243,143 @@
         )) + "px";
 
         blocks = getOrganizationBlocks("daily", [day]);
-        for (i = 0; i < blocks.length; i += 1) {
-            blockItems = getItemsForOrganizationDay(blocks[i].section, blocks[i].team, day, "daily");
-            placedItems = [];
-            laneEnds = [];
-            for (j = 0; j < blockItems.length; j += 1) {
-                itemRange = getDailyItemRange(blockItems[j], day, rangeStart, rangeEnd);
-                minimumVisualPixels = estimateDailyCaptionPixels(blockItems[j]);
-                minimumVisualDuration = Math.min(
-                    totalMinutes,
-                    Math.ceil(slotMinutes * minimumVisualPixels / 88)
-                );
-                visualDuration = Math.max(itemRange.end - itemRange.start, minimumVisualDuration);
-                visualStart = itemRange.start - (visualDuration - (itemRange.end - itemRange.start)) / 2;
-                visualEnd = visualStart + visualDuration;
-                if (visualStart < rangeStart) {
-                    visualEnd += rangeStart - visualStart;
-                    visualStart = rangeStart;
+        sections = getOrganizationSectionsFromBlocks(blocks);
+        for (sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+            section = sections[sectionIndex];
+            if (section.hasTeams) {
+                appendOrganizationSectionRow(body, section, 1);
+                if (isOrganizationSectionCollapsed(section.name)) {
+                    continue;
                 }
-                if (visualEnd > rangeEnd) {
-                    visualStart = Math.max(rangeStart, visualStart - (visualEnd - rangeEnd));
-                    visualEnd = rangeEnd;
-                }
-                laneIndex = 0;
-                while (laneIndex < laneEnds.length && visualStart < laneEnds[laneIndex]) {
-                    laneIndex += 1;
-                }
-                laneEnds[laneIndex] = visualEnd;
-                placedItems.push({
-                    item: blockItems[j],
-                    range: itemRange,
-                    displayRange: {start: visualStart, end: visualEnd},
-                    lane: laneIndex
-                });
             }
-            rowCount = Math.max(blocks[i].rowCount, laneEnds.length, 1);
-
-            row = document.createElement("tr");
-            groupCell = document.createElement("th");
-            groupCell.className = "organization-name daily-organization-name";
-            groupCell.appendChild(document.createTextNode(blocks[i].label));
-            row.appendChild(groupCell);
-
-            timelineCell = document.createElement("td");
-            timelineCell.className = "daily-timeline-cell clickable-slot";
-            timelineCell.title = blocks[i].label + "の時間帯をクリックして予定を追加。右クリックで貼り付け";
-            timeline = document.createElement("div");
-            timeline.className = "daily-timeline";
-            timeline.style.height = (rowCount * 52 + 8) + "px";
-            timelineCell._dailyMeta = {
-                timeline: timeline,
-                section: blocks[i].section,
-                team: blocks[i].team,
-                day: new Date(day.getTime()),
-                rangeStart: rangeStart,
-                rangeEnd: rangeEnd
-            };
-            appendDailyGridLines(timeline, rangeStart, rangeEnd, slotMinutes);
-            for (j = 0; j < placedItems.length; j += 1) {
-                timeline.appendChild(createDailyEventBar(
-                    placedItems[j].item,
-                    placedItems[j].range,
-                    placedItems[j].displayRange,
-                    rangeStart,
-                    rangeEnd,
-                    placedItems[j].lane
-                ));
-            }
-            timelineCell.appendChild(timeline);
-            (function (cell, section, team, targetDay) {
-                cell.onclick = function (event) {
-                    var sourceEvent = event || window.event;
-                    var target = getDailyTarget(cell, sourceEvent.clientX, false);
-                    var targetDate;
-                    hideDailyContextMenu();
-                    dailyInteraction.target = target;
-                    targetDate = new Date(
-                        targetDay.getFullYear(),
-                        targetDay.getMonth(),
-                        targetDay.getDate(),
-                        Math.floor(target.minute / 60),
-                        target.minute % 60,
-                        0,
-                        0
+            for (blockIndex = 0; blockIndex < section.blocks.length; blockIndex += 1) {
+                block = section.blocks[blockIndex];
+                collapsed = isOrganizationBlockCollapsed(block.section, block.team);
+                row = document.createElement("tr");
+                if (collapsed) {
+                    row.className = "organization-collapsed";
+                    groupCell = document.createElement("th");
+                    groupCell.className = "organization-name daily-organization-name" +
+                        (block.team ? " organization-team-name" : "");
+                    appendOrganizationName(
+                        groupCell,
+                        block.team || block.section,
+                        true,
+                        block.section,
+                        block.team,
+                        false
                     );
-                    openEditor(null, targetDate, true, {section: section, team: team});
+                    timelineCell = document.createElement("td");
+                    timelineCell.className = "daily-timeline-cell organization-collapsed-cell";
+                    timelineCell.appendChild(document.createTextNode("\u00a0"));
+                    row.appendChild(groupCell);
+                    row.appendChild(timelineCell);
+                    body.appendChild(row);
+                    continue;
+                }
+
+                blockItems = getItemsForOrganizationDay(block.section, block.team, day, "daily");
+                placedItems = [];
+                laneEnds = [];
+                for (j = 0; j < blockItems.length; j += 1) {
+                    itemRange = getDailyItemRange(blockItems[j], day, rangeStart, rangeEnd);
+                    minimumVisualPixels = estimateDailyCaptionPixels(blockItems[j]);
+                    minimumVisualDuration = Math.min(
+                        totalMinutes,
+                        Math.ceil(slotMinutes * minimumVisualPixels / 88)
+                    );
+                    visualDuration = Math.max(itemRange.end - itemRange.start, minimumVisualDuration);
+                    visualStart = itemRange.start - (visualDuration - (itemRange.end - itemRange.start)) / 2;
+                    visualEnd = visualStart + visualDuration;
+                    if (visualStart < rangeStart) {
+                        visualEnd += rangeStart - visualStart;
+                        visualStart = rangeStart;
+                    }
+                    if (visualEnd > rangeEnd) {
+                        visualStart = Math.max(rangeStart, visualStart - (visualEnd - rangeEnd));
+                        visualEnd = rangeEnd;
+                    }
+                    laneIndex = 0;
+                    while (laneIndex < laneEnds.length && visualStart < laneEnds[laneIndex]) {
+                        laneIndex += 1;
+                    }
+                    laneEnds[laneIndex] = visualEnd;
+                    placedItems.push({
+                        item: blockItems[j],
+                        range: itemRange,
+                        displayRange: {start: visualStart, end: visualEnd},
+                        lane: laneIndex
+                    });
+                }
+                rowCount = getRenderedRowCount(block, laneEnds.length);
+
+                groupCell = document.createElement("th");
+                groupCell.className = "organization-name daily-organization-name" +
+                    (block.team ? " organization-team-name" : "");
+                appendOrganizationName(
+                    groupCell,
+                    block.team || block.section,
+                    false,
+                    block.section,
+                    block.team,
+                    false
+                );
+                row.appendChild(groupCell);
+
+                timelineCell = document.createElement("td");
+                timelineCell.className = "daily-timeline-cell clickable-slot";
+                timelineCell.title = block.label + "の時間帯をクリックして予定を追加。右クリックで貼り付け";
+                timeline = document.createElement("div");
+                timeline.className = "daily-timeline";
+                groupLayout = getDailyGroupLayout(rowCount);
+                timeline.style.height = groupLayout.timelineHeight + "px";
+                timelineCell._dailyMeta = {
+                    timeline: timeline,
+                    section: block.section,
+                    team: block.team,
+                    day: new Date(day.getTime()),
+                    rangeStart: rangeStart,
+                    rangeEnd: rangeEnd
                 };
-                cell.oncontextmenu = function (event) {
-                    selectDailyItem(null, null);
-                    return showDailyContextMenu(event || window.event, null, cell);
-                };
-            }(timelineCell, blocks[i].section, blocks[i].team, day));
-            row.appendChild(timelineCell);
-            body.appendChild(row);
+                appendDailyGridLines(timeline, rangeStart, rangeEnd, slotMinutes);
+                for (j = 0; j < placedItems.length; j += 1) {
+                    timeline.appendChild(createDailyEventBar(
+                        placedItems[j].item,
+                        placedItems[j].range,
+                        placedItems[j].displayRange,
+                        rangeStart,
+                        rangeEnd,
+                        placedItems[j].lane,
+                        groupLayout.groupBorderMargin
+                    ));
+                }
+                timelineCell.appendChild(timeline);
+                (function (cell, sectionName, teamName, targetDay) {
+                    cell.onclick = function (event) {
+                        var sourceEvent = event || window.event;
+                        var target = getDailyTarget(cell, sourceEvent.clientX, false);
+                        var targetDate;
+                        hideDailyContextMenu();
+                        dailyInteraction.target = target;
+                        targetDate = new Date(
+                            targetDay.getFullYear(),
+                            targetDay.getMonth(),
+                            targetDay.getDate(),
+                            Math.floor(target.minute / 60),
+                            target.minute % 60,
+                            0,
+                            0
+                        );
+                        openEditor(null, targetDate, true, {section: sectionName, team: teamName});
+                    };
+                    cell.oncontextmenu = function (event) {
+                        selectDailyItem(null, null);
+                        return showDailyContextMenu(event || window.event, null, cell);
+                    };
+                }(timelineCell, block.section, block.team, day));
+                row.appendChild(timelineCell);
+                body.appendChild(row);
+            }
         }
     }
 

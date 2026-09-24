@@ -73,6 +73,7 @@ var organizationSettingsOptions = {
             monthlyRows: "MonthlyRows",
             weeklyRows: "WeeklyRows",
             dailyRows: "DailyRows",
+            autoRows: "AutoRows",
             sortOrder: "SortOrder",
             isActive: "IsActive"
         }
@@ -96,6 +97,22 @@ test("範囲外の時分を拒否する", function () {
 
 test("日時の後ろに余分な文字がある値を拒否する", function () {
     assert.strictEqual(util.parseDate("2026-09-16 09:00 invalid"), null);
+});
+
+test("週間表示は月曜日から日曜日までとする", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({Date: Date});
+    var start = appSource.indexOf("    function startOfDay(");
+    var end = appSource.indexOf("    function formatJapaneseDate(");
+    var monday;
+
+    vm.runInContext(appSource.slice(start, end), scope);
+    monday = scope.startOfWeek(new Date(2026, 8, 23));
+    assert.strictEqual(monday.getTime(), new Date(2026, 8, 21).getTime());
+    monday = scope.startOfWeek(new Date(2026, 8, 27));
+    assert.strictEqual(monday.getTime(), new Date(2026, 8, 21).getTime());
+    monday = scope.startOfWeek(new Date(2026, 8, 28));
+    assert.strictEqual(monday.getTime(), new Date(2026, 8, 28).getTime());
 });
 
 test("CSVの予定を画面上で追加・更新・削除できる", function () {
@@ -134,18 +151,25 @@ test("CSVの予定を画面上で追加・更新・削除できる", function ()
 
 test("SharePointの設定項目を組織設定へ変換できる", function () {
     var source = new OrganizationSettingsDataSource(organizationSettingsOptions);
+    var defaultAuto = source.toItem({ID: 10, Title: "既存設定", MonthlyRows: 5, WeeklyRows: 5, DailyRows: 5});
+    var fixedRows = source.toItem({ID: 11, Title: "固定設定", MonthlyRows: 5, WeeklyRows: 5, DailyRows: 5, AutoRows: false});
     var converted = source.toOrganizationConfig([
-        {id: 3, groupName: "GP2", teamName: "", monthlyRows: 1, weeklyRows: 2, dailyRows: 3, sortOrder: 20, isActive: true},
-        {id: 1, groupName: "GP1科", teamName: "GS班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2, sortOrder: 10, isActive: true},
-        {id: 2, groupName: "GP1科", teamName: "JN班", monthlyRows: 4, weeklyRows: 3, dailyRows: 2, sortOrder: 11, isActive: true},
+        {id: 3, groupName: "GP2", teamName: "", monthlyRows: 1, weeklyRows: 2, dailyRows: 3, autoRows: true, sortOrder: 20, isActive: true},
+        {id: 1, groupName: "GP1科", teamName: "GS班", monthlyRows: 5, weeklyRows: 2, dailyRows: 2, autoRows: false, sortOrder: 10, isActive: true},
+        {id: 2, groupName: "GP1科", teamName: "JN班", monthlyRows: 4, weeklyRows: 3, dailyRows: 2, autoRows: true, sortOrder: 11, isActive: true},
         {id: 4, groupName: "無効", teamName: "", monthlyRows: 1, weeklyRows: 1, dailyRows: 1, sortOrder: 30, isActive: false}
     ], {separator: "／", metadataSeparator: "｜", targetSeparator: "・"});
+    assert.strictEqual(defaultAuto.autoRows, true);
+    assert.strictEqual(fixedRows.autoRows, false);
     assert.strictEqual(converted.groups.length, 2);
     assert.strictEqual(converted.groups[0].name, "GP1科");
     assert.strictEqual(converted.groups[0].teams.length, 2);
     assert.strictEqual(converted.groups[0].teams[1].name, "JN班");
+    assert.strictEqual(converted.groups[0].teams[0].autoRows, false);
+    assert.strictEqual(converted.groups[0].teams[1].autoRows, true);
     assert.strictEqual(converted.groups[1].name, "GP2");
     assert.strictEqual(converted.groups[1].dailyRows, 3);
+    assert.strictEqual(converted.groups[1].autoRows, true);
 });
 
 test("組織設定の更新時にETagを送る", function () {
@@ -160,6 +184,7 @@ test("組織設定の更新時にETagを送る", function () {
         monthlyRows: 5,
         weeklyRows: 4,
         dailyRows: 3,
+        autoRows: true,
         sortOrder: 10,
         isActive: true
     };
@@ -178,6 +203,7 @@ test("組織設定の更新時にETagを送る", function () {
         throw new Error(message);
     });
     assert.strictEqual(sentHeaders["IF-MATCH"], "\"8\"");
+    assert.strictEqual(sentPayload.AutoRows, true);
     assert.strictEqual(sentHeaders["X-HTTP-Method"], "MERGE");
     assert.strictEqual(sentPayload.Title, "GP1");
     assert.strictEqual(sentPayload.WeeklyRows, 4);
@@ -317,6 +343,48 @@ test("日々表示は通常7時から18時で必要な時間帯だけを広げ�
     assert.deepStrictEqual({start: range.start, end: range.end}, {start: 420, end: 1080});
 });
 
+test("大グループと小グループを1行へ最小化できる", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
+    var scope = vm.createContext({});
+    var start = appSource.indexOf("    function getOrganizationSectionsFromBlocks(");
+    var end = appSource.indexOf("    function isOrganizationSectionCollapsed(");
+    var sections;
+
+    vm.runInContext(appSource.slice(start, end), scope);
+    sections = scope.getOrganizationSectionsFromBlocks([
+        {section: "GP1", team: ""},
+        {section: "GP1科", team: "GS班"},
+        {section: "GP1科", team: "JN班"}
+    ]);
+    assert.strictEqual(sections.length, 2);
+    assert.strictEqual(sections[0].hasTeams, false);
+    assert.strictEqual(sections[1].hasTeams, true);
+    assert.strictEqual(sections[1].blocks.length, 2);
+    assert.ok(appSource.indexOf("organizationCollapseState") >= 0);
+    assert.ok(appSource.indexOf("appendOrganizationSectionRow(body, section") >= 0);
+    assert.ok(appSource.indexOf("rowCount = collapsed ? 1 : getRenderedRowCount(block, requiredRows)") >= 0);
+    assert.ok(css.indexOf(".organization-collapse-button") >= 0);
+    assert.ok(css.indexOf(".organization-collapsed-cell") >= 0);
+});
+
+test("行数の自動調整は不要な空き行を表示しない", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+    var settingsSource = fs.readFileSync(path.join(root, "js/settings-controller.js"), "utf8");
+    var scope = vm.createContext({Math: Math});
+    var start = appSource.indexOf("    function getRenderedRowCount(");
+    var end = appSource.indexOf("    function getOrganizationKey(");
+
+    vm.runInContext(appSource.slice(start, end), scope);
+    assert.strictEqual(scope.getRenderedRowCount({rowCount: 5, autoRows: true}, 1), 1);
+    assert.strictEqual(scope.getRenderedRowCount({rowCount: 5, autoRows: true}, 0), 1);
+    assert.strictEqual(scope.getRenderedRowCount({rowCount: 5, autoRows: false}, 1), 5);
+    assert.strictEqual(scope.getRenderedRowCount({rowCount: 5, autoRows: true}, 6), 6);
+    assert.ok(html.indexOf('id="setting-auto-rows" checked') >= 0);
+    assert.ok(settingsSource.indexOf('autoRows: byId("setting-auto-rows").checked') >= 0);
+});
+
 test("短時間予定の横線は文字枠を広げても実時刻に一致する", function () {
     var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var scope = vm.createContext({
@@ -349,6 +417,40 @@ test("短時間予定の横線は文字枠を広げても実時刻に一致す�
         assert.ok(Math.abs(start - (range.actual.start - 360) / 960 * 100) < 0.00001);
         assert.ok(Math.abs(end - (range.actual.end - 360) / 960 * 100) < 0.00001);
     });
+});
+
+test("日々予定は文字の高さを維持して上下余白を縮める", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
+    var scope = vm.createContext({Math: Math});
+    var start = appSource.indexOf("    function getDailyLaneMetrics(");
+    var end = appSource.indexOf("    function createDailyEventBar(");
+    var metrics;
+
+    vm.runInContext(appSource.slice(start, end), scope);
+    metrics = scope.getDailyLaneMetrics();
+    assert.strictEqual(metrics.contentHeight, 37);
+    assert.strictEqual(metrics.bodyVerticalPadding, 1);
+    assert.strictEqual(metrics.eventHeight, 39);
+    assert.strictEqual(metrics.laneHeight, 41);
+    assert.ok(appSource.indexOf("groupBorderMargin + laneIndex * laneMetrics.laneHeight") >= 0);
+    assert.ok(appSource.indexOf("getDailyGroupLayout(rowCount)") >= 0);
+    assert.ok(/\.daily-event-bar\s*\{[\s\S]*?height:\s*39px;[\s\S]*?padding:\s*1px 0;/.test(css));
+});
+
+test("日々予定の段数が増えてもグループ外側の余白を増やさない", function () {
+    var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({Math: Math});
+    var start = appSource.indexOf("    function getDailyLaneMetrics(");
+    var end = appSource.indexOf("    function createDailyEventBar(");
+
+    vm.runInContext(appSource.slice(start, end), scope);
+    assert.strictEqual(scope.getDailyGroupLayout(1).scheduledAreaHeight, 39);
+    assert.strictEqual(scope.getDailyGroupLayout(1).groupBorderMargin, 2);
+    assert.strictEqual(scope.getDailyGroupLayout(1).timelineHeight, 43);
+    assert.strictEqual(scope.getDailyGroupLayout(4).scheduledAreaHeight, 162);
+    assert.strictEqual(scope.getDailyGroupLayout(4).groupBorderMargin, 2);
+    assert.strictEqual(scope.getDailyGroupLayout(4).timelineHeight, 166);
 });
 
 test("分離した日時入力は直接時刻・終日・不正値を扱える", function () {

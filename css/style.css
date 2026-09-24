@@ -398,10 +398,10 @@ body.editor-open .app-shell {
 .daily-event-bar {
     position: absolute;
     z-index: 1;
-    height: 44px;
+    height: 39px;
     min-width: 12px;
     margin: 0;
-    padding: 0;
+    padding: 1px 0;
     overflow: visible;
     border: 0;
     background: transparent;
@@ -424,7 +424,7 @@ body.editor-open .app-shell {
 .daily-resize-handle {
     position: absolute;
     z-index: 4;
-    top: 11px;
+    top: 10px;
     width: 12px;
     height: 16px;
     margin-left: -6px;
@@ -641,6 +641,58 @@ body.editor-open .app-shell {
     font-weight: bold;
     text-align: left;
     white-space: nowrap;
+}
+
+.organization-collapse-button {
+    width: 18px;
+    height: 18px;
+    margin: 0 5px 0 0;
+    padding: 0;
+    border: 1px solid #71869a;
+    background: #fff;
+    color: #174f7c;
+    font-family: "Yu Gothic UI", "Meiryo", sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 14px;
+    vertical-align: middle;
+    cursor: pointer;
+}
+
+.organization-collapse-button:hover,
+.organization-collapse-button:focus {
+    background: #e3eff9;
+}
+
+.organization-name-label {
+    vertical-align: middle;
+}
+
+.organization-section-row .organization-name,
+.organization-section-row .organization-section-cell {
+    height: 24px;
+    background: #dfe8ef;
+    border-top: 2px solid #8ba0b2;
+    border-bottom: 1px solid #aebdca;
+}
+
+.organization-section-row .organization-section-name {
+    color: #173e5d;
+}
+
+.organization-schedule .organization-team-name {
+    padding-left: 18px;
+}
+
+.organization-collapsed > .organization-name,
+.organization-collapsed > .organization-schedule-cell,
+.organization-collapsed > .daily-timeline-cell {
+    height: 24px;
+}
+
+.organization-collapsed-cell {
+    min-height: 24px;
+    background: #f8fafb;
 }
 
 .organization-schedule-cell {
