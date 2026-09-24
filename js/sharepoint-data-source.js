@@ -36,6 +36,8 @@
         this.pageSize = options.pageSize || 500;
         this.readOnly = false;
         this.entityType = "";
+        this.styleFieldsAvailable = null;
+        this.textColorFieldAvailable = null;
     }
 
     SharePointDataSource.prototype.getApiUrl = function (path) {
@@ -66,9 +68,9 @@
             if ((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304) {
                 success(xhr);
             } else if (xhr.status === 412) {
-                failure("ほかのユーザーがこの予定を更新しました。再読込してから、もう一度操作してください。");
+                failure("ほかのユーザーがこの予定を更新しました。再読込してから、もう一度操作してください。", 412);
             } else {
-                failure(util.getErrorMessage(xhr, "SharePointとの通信に失敗しました"));
+                failure(util.getErrorMessage(xhr, "SharePointとの通信に失敗しました"), xhr.status);
             }
         };
         xhr.send(body || null);
@@ -78,6 +80,10 @@
         var f = this.fields;
         var startDate = row[f.startDate] ? new Date(row[f.startDate]) : null;
         var endDate = row[f.endDate] ? new Date(row[f.endDate]) : null;
+        var created = row[f.created || "Created"] ? new Date(row[f.created || "Created"]) : null;
+        var modified = row[f.modified || "Modified"] ? new Date(row[f.modified || "Modified"]) : null;
+        var author = row[f.author || "Author"];
+        var editor = row[f.editor || "Editor"];
         return {
             id: row[f.id],
             etag: row.__metadata && row.__metadata.etag ? row.__metadata.etag : "",
@@ -89,6 +95,13 @@
             location: row[f.location] || "",
             description: row[f.description] || "",
             purpose: row[f.purpose] || "",
+            lineStyle: util.normalizeLineStyle(f.lineStyle ? row[f.lineStyle] : ""),
+            lineColor: util.normalizeLineColor(f.lineColor ? row[f.lineColor] : ""),
+            textColor: util.normalizeTextColor(f.textColor ? row[f.textColor] : ""),
+            createdBy: author && author.Title ? author.Title : "",
+            createdAt: created && !isNaN(created.getTime()) ? created : null,
+            modifiedBy: editor && editor.Title ? editor.Title : "",
+            modifiedAt: modified && !isNaN(modified.getTime()) ? modified : null,
             sortOrder: 0,
             isActive: true,
             source: "sharepoint"
@@ -98,21 +111,44 @@
     SharePointDataSource.prototype.load = function (range, success, failure) {
         var self = this;
         var f = this.fields;
-        var select = [f.id, f.title, f.startDate, f.endDate, f.category, f.location, f.description, f.purpose].join(",");
+        var authorField = f.author || "Author";
+        var editorField = f.editor || "Editor";
+        var baseSelect = [f.id, f.title, f.startDate, f.endDate, f.category, f.location,
+            f.description, f.purpose, f.created || "Created", f.modified || "Modified",
+            authorField + "/Title", editorField + "/Title"];
+        var includeStyle = !!(f.lineStyle && f.lineColor && this.styleFieldsAvailable !== false);
+        var includeTextColor = !!(f.textColor && this.textColorFieldAvailable !== false);
+        var attempts = [{style: includeStyle, text: includeTextColor}];
+        var attemptIndex = 0;
         var filter = "";
         var url;
         var items = [];
-        if (f.allDay) { select += "," + f.allDay; }
+        if (f.allDay) { baseSelect.push(f.allDay); }
+        if (includeTextColor) { attempts.push({style: includeStyle, text: false}); }
+        if (includeStyle && includeTextColor) { attempts.push({style: false, text: true}); }
+        if (includeStyle || includeTextColor) { attempts.push({style: false, text: false}); }
+
+        function buildUrl() {
+            var select = baseSelect.slice(0);
+            if (attempts[attemptIndex].style) {
+                select.push(f.lineStyle, f.lineColor);
+            }
+            if (attempts[attemptIndex].text) {
+                select.push(f.textColor);
+            }
+            return self.getApiUrl(self.getListPath() + "/items?$select=" + encodeURIComponent(select.join(",")) +
+                "&$expand=" + encodeURIComponent(authorField + "," + editorField) +
+                (filter ? "&$filter=" + encodeURIComponent(filter) : "") +
+                "&$orderby=" + encodeURIComponent(f.startDate + " asc") +
+                "&$top=" + encodeURIComponent(self.pageSize));
+        }
 
         try {
             if (range && range.startDate && range.endDate) {
                 filter = f.startDate + " lt datetime'" + util.toIsoString(range.endDate) + "' and " +
                     f.endDate + " ge datetime'" + util.toIsoString(range.startDate) + "'";
             }
-            url = this.getApiUrl(this.getListPath() + "/items?$select=" + encodeURIComponent(select) +
-                (filter ? "&$filter=" + encodeURIComponent(filter) : "") +
-                "&$orderby=" + encodeURIComponent(f.startDate + " asc") +
-                "&$top=" + encodeURIComponent(this.pageSize));
+            url = buildUrl();
         } catch (error) {
             failure(error.message);
             return;
@@ -125,6 +161,12 @@
                 var i;
                 try {
                     data = util.getJson(xhr);
+                    if (f.lineStyle && f.lineColor) {
+                        self.styleFieldsAvailable = attempts[attemptIndex].style;
+                    }
+                    if (f.textColor) {
+                        self.textColorFieldAvailable = attempts[attemptIndex].text;
+                    }
                     results = data.d && data.d.results ? data.d.results : [];
                     for (i = 0; i < results.length; i += 1) {
                         items.push(self.toItem(results[i]));
@@ -137,7 +179,18 @@
                 } catch (error) {
                     failure("SharePointの応答を解析できませんでした。" + (error.message ? " " + error.message : ""));
                 }
-            }, failure);
+            }, function (message, status) {
+                if (status === 400 && items.length === 0 && attemptIndex + 1 < attempts.length) {
+                    attemptIndex += 1;
+                    try {
+                        loadPage(buildUrl());
+                    } catch (error) {
+                        failure(error.message);
+                    }
+                } else {
+                    failure(message);
+                }
+            });
         }
 
         loadPage(url);
@@ -188,6 +241,18 @@
         payload[f.description] = item.description || "";
         payload[f.purpose] = item.purpose || "";
         if (f.allDay) { payload[f.allDay] = !!item.allDay; }
+        if (f.lineStyle && f.lineColor && this.styleFieldsAvailable !== false &&
+                (this.styleFieldsAvailable === true ||
+                    util.normalizeLineStyle(item.lineStyle) !== "solid" ||
+                    util.normalizeLineColor(item.lineColor) !== "default")) {
+            payload[f.lineStyle] = util.normalizeLineStyle(item.lineStyle);
+            payload[f.lineColor] = util.normalizeLineColor(item.lineColor);
+        }
+        if (f.textColor && this.textColorFieldAvailable !== false &&
+                (this.textColorFieldAvailable === true ||
+                    util.normalizeTextColor(item.textColor) !== "default")) {
+            payload[f.textColor] = util.normalizeTextColor(item.textColor);
+        }
         return payload;
     };
 
@@ -195,6 +260,17 @@
         var self = this;
         if (isUpdate && !item.etag) {
             failure("予定の更新情報を確認できません。再読込してから、もう一度操作してください。");
+            return;
+        }
+        if ((util.normalizeLineStyle(item.lineStyle) !== "solid" ||
+                util.normalizeLineColor(item.lineColor) !== "default") &&
+                (!this.fields.lineStyle || !this.fields.lineColor || this.styleFieldsAvailable === false)) {
+            failure("線の設定を保存するには、SharePoint予定リストにLineStyle列とLineColor列を追加してください。");
+            return;
+        }
+        if (util.normalizeTextColor(item.textColor) !== "default" &&
+                (!this.fields.textColor || this.textColorFieldAvailable === false)) {
+            failure("文字色を保存するには、SharePoint予定リストにTextColor列を追加してください。");
             return;
         }
         this.getEntityType(function (entityType) {

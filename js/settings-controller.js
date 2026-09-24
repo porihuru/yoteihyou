@@ -22,6 +22,7 @@
         this.baseConfig = options.baseConfig;
         this.onApply = options.onApply;
         this.onOpen = options.onOpen;
+        this.canEdit = options.canEdit || function () { return true; };
         this.items = [];
         this.editingItem = null;
         this.loaded = false;
@@ -35,8 +36,9 @@
     };
 
     SettingsController.prototype.setBusy = function (busy) {
-        byId("settings-save").disabled = busy;
-        byId("settings-delete").disabled = busy;
+        byId("settings-save").disabled = busy || !this.canEdit();
+        byId("settings-delete").disabled = busy || !this.canEdit();
+        byId("settings-new").disabled = busy || !this.canEdit();
         byId("settings-reload").disabled = busy;
     };
 
@@ -78,6 +80,7 @@
             button = document.createElement("button");
             button.type = "button";
             button.className = "button button-small";
+            button.disabled = !this.canEdit();
             button.appendChild(document.createTextNode("編集"));
             (function (targetItem) {
                 button.onclick = function () {
@@ -219,6 +222,10 @@
         } else if (window.event) {
             window.event.returnValue = false;
         }
+        if (!this.canEdit()) {
+            this.setStatus("予定表は読取専用です。作業するには「予定表更新」を押してください。", true);
+            return false;
+        }
         if (!this.source.canConnect()) {
             this.setStatus("SharePointへ接続できないため保存できません。", true);
             return false;
@@ -245,6 +252,10 @@
     SettingsController.prototype.remove = function () {
         var self = this;
         var item = this.editingItem;
+        if (!this.canEdit()) {
+            this.setStatus("予定表は読取専用です。作業するには「予定表更新」を押してください。", true);
+            return;
+        }
         if (!item || !window.confirm("この組織設定を削除しますか？")) {
             return;
         }

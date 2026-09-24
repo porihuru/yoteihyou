@@ -19,6 +19,9 @@
                 <button type="button" id="reload-button" class="button button-small">再読込</button>
             </div>
             <div id="connection-status" class="connection-status" aria-live="polite">読込準備中</div>
+            <span id="edit-mode-status" class="edit-mode-status">読取専用</span>
+            <button type="button" id="toggle-schedule-edit" class="button button-small" aria-pressed="false">予定表更新</button>
+            <span id="access-counter" class="access-counter" title="暫定表示。SharePointから取得後に更新します。" aria-live="polite">アクセス 123</span>
         </div>
 
         <div id="message" class="message" aria-live="polite"></div>
@@ -32,10 +35,51 @@
             <button type="button" id="previous-month" class="button">前月</button>
             <button type="button" id="current-month" class="button">今月</button>
             <button type="button" id="next-month" class="button">翌月</button>
-            <span id="month-title" class="month-title"></span>
+            <span class="date-display-group">
+                <span id="month-title" class="month-title"></span>
+                <span class="appearance-controls" aria-label="表示設定">
+                    <button type="button" id="toggle-dark-mode" class="button appearance-button" aria-pressed="false">ダークモード</button>
+                    <span class="zoom-controls">
+                        <span class="zoom-label">表示</span>
+                        <button type="button" id="zoom-out" class="button appearance-button zoom-button" aria-label="表示を縮小">－</button>
+                        <span id="zoom-value" class="zoom-value">100%</span>
+                        <button type="button" id="zoom-in" class="button appearance-button zoom-button" aria-label="表示を拡大">＋</button>
+                    </span>
+                </span>
+            </span>
             <button type="button" id="print-view" class="button toolbar-right">印刷</button>
+            <button type="button" id="open-history" class="button toolbar-right">履歴</button>
             <button type="button" id="new-event" class="button button-primary toolbar-right">予定を追加</button>
             <button type="button" id="open-settings" class="button toolbar-right">設定</button>
+        </div>
+
+        <div id="print-preview" class="print-preview" role="dialog" aria-modal="true" aria-labelledby="print-preview-title" style="display:none;">
+            <div class="print-preview-controls">
+                <div class="print-preview-heading">
+                    <h2 id="print-preview-title">印刷プレビュー</h2>
+                    <button type="button" id="close-print-preview" class="button">閉じる</button>
+                </div>
+                <div class="print-preview-options">
+                    <label>用紙 <select id="print-paper"><option value="A4">A4</option><option value="A3">A3</option></select></label>
+                    <label>向き <select id="print-orientation"><option value="portrait">縦</option><option value="landscape">横</option></select></label>
+                    <label>横の縮尺 <input type="number" id="print-scale-x" min="25" max="200" step="5" value="100">％</label>
+                    <label>縦の縮尺 <input type="number" id="print-scale-y" min="25" max="200" step="5" value="100">％</label>
+                </div>
+                <p class="print-preview-hint">横は列幅、縦は行高を変更します。文字は縦横比を保って大きさを調整します。</p>
+                <div class="print-preview-group-heading">
+                    <strong>印刷するグループ</strong>
+                    <button type="button" id="print-select-all" class="button button-small">すべて選択</button>
+                    <button type="button" id="print-select-none" class="button button-small">すべて解除</button>
+                </div>
+                <div id="print-groups" class="print-preview-groups"></div>
+                <p id="print-preview-status" class="print-preview-status" aria-live="polite"></p>
+                <button type="button" id="execute-print" class="button button-primary">印刷する</button>
+            </div>
+            <div class="print-preview-scroll">
+                <div id="print-preview-page" class="print-preview-page">
+                    <div id="print-preview-content" class="print-preview-content"></div>
+                </div>
+            </div>
         </div>
 
         <div id="print-area" class="print-area">
@@ -49,7 +93,8 @@
             </div>
 
             <div id="weekly-view" class="list-view schedule-view" style="display:none;">
-            <table class="schedule-list organization-schedule weekly-schedule" aria-label="週間予定表">
+            <table id="weekly-table" class="schedule-list organization-schedule weekly-schedule" aria-label="週間予定表">
+                <colgroup id="weekly-columns"><col><col><col><col><col><col><col><col></colgroup>
                 <thead id="weekly-head"></thead>
                 <tbody id="weekly-body"></tbody>
             </table>
@@ -64,9 +109,19 @@
         </div>
 
         <div id="event-editor" class="editor-panel" role="region" aria-labelledby="editor-title" style="display:none;">
-            <h2 id="editor-title">予定を追加</h2>
+            <div class="editor-header">
+                <h2 id="editor-title">予定を追加</h2>
+                <div class="editor-header-actions">
+                    <button type="button" id="save-event-top" class="button button-primary">保存</button>
+                    <button type="button" id="delete-event-top" class="button button-danger" style="display:none;">削除</button>
+                    <button type="button" id="cancel-edit-top" class="button">取消</button>
+                </div>
+            </div>
             <form id="event-form">
                 <input type="hidden" id="event-id" value="">
+                <input type="hidden" id="line-style" value="solid">
+                <input type="hidden" id="line-color" value="default">
+                <input type="hidden" id="text-color" value="default">
                 <div class="form-row">
                     <label for="event-name">件名 <span class="required">必須</span></label>
                     <input type="text" id="event-name" maxlength="255">
@@ -128,6 +183,36 @@
                     <label for="description">内容</label>
                     <textarea id="description" rows="4"></textarea>
                 </div>
+                <div class="form-row line-settings">
+                    <span class="form-label">予定の線</span>
+                    <div id="line-style-buttons" class="line-choice-group" role="group" aria-label="線の種類">
+                        <button type="button" class="button line-choice-button active" data-value="solid" aria-pressed="true">実線</button>
+                        <button type="button" class="button line-choice-button" data-value="dotted" aria-pressed="false">点線</button>
+                    </div>
+                    <div id="line-color-buttons" class="line-choice-group" role="group" aria-label="線の色">
+                        <button type="button" class="button line-choice-button active" data-value="default" aria-pressed="true">標準（青）</button>
+                        <button type="button" class="button line-choice-button" data-value="red" aria-pressed="false">赤</button>
+                        <button type="button" class="button line-choice-button" data-value="green" aria-pressed="false">緑</button>
+                        <button type="button" class="button line-choice-button" data-value="brown" aria-pressed="false">茶</button>
+                    </div>
+                    <div class="line-preview" aria-hidden="true"><span id="line-preview-line" class="daily-event-line"></span></div>
+                </div>
+                <div class="form-row text-color-settings">
+                    <span class="form-label">予定の文字色</span>
+                    <div id="text-color-buttons" class="line-choice-group" role="group" aria-label="文字の色">
+                        <button type="button" class="button line-choice-button active" data-value="default" aria-pressed="true">標準（青）</button>
+                        <button type="button" class="button line-choice-button" data-value="red" aria-pressed="false">赤</button>
+                        <button type="button" class="button line-choice-button" data-value="green" aria-pressed="false">緑</button>
+                        <button type="button" class="button line-choice-button" data-value="brown" aria-pressed="false">茶</button>
+                    </div>
+                    <div class="text-color-preview" aria-hidden="true"><span id="text-preview-text">予定の文字</span></div>
+                </div>
+                <div class="event-audit" aria-label="登録情報">
+                    <div class="event-audit-row"><span>作成者</span><span id="event-created-by">未登録</span></div>
+                    <div class="event-audit-row"><span>作成日時</span><span id="event-created-at">未登録</span></div>
+                    <div class="event-audit-row"><span>更新者</span><span id="event-modified-by">未登録</span></div>
+                    <div class="event-audit-row"><span>更新日時</span><span id="event-modified-at">未登録</span></div>
+                </div>
                 <div class="editor-actions">
                     <button type="submit" id="save-event" class="button button-primary">保存</button>
                     <button type="button" id="delete-event" class="button button-danger" style="display:none;">削除</button>
@@ -137,12 +222,28 @@
             </form>
         </div>
 
+        <div id="history-panel" class="editor-panel history-panel" role="region" aria-labelledby="history-title" style="display:none;">
+            <div class="editor-header">
+                <h2 id="history-title">操作履歴</h2>
+                <div class="editor-header-actions"><button type="button" id="close-history" class="button">閉じる</button></div>
+            </div>
+            <p id="history-status" class="history-status" aria-live="polite"></p>
+            <div id="history-list" class="history-list"></div>
+            <div id="history-detail" class="history-detail"></div>
+        </div>
+
         <div id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" style="display:none;">
             <div class="settings-header">
                 <h2 id="settings-title">組織設定</h2>
                 <button type="button" id="close-settings" class="button">閉じる</button>
             </div>
             <div id="settings-status" class="settings-status" aria-live="polite"></div>
+            <div class="cookie-settings">
+                <strong>この端末の表示設定</strong>
+                <p>この予定表のグループ開閉状態、表示モード、ダークモード、倍率、印刷設定をCookieに保存します。初期化すると、これらの設定を削除します。</p>
+                <button type="button" id="reset-display-cookies" class="button">表示設定Cookieを初期化</button>
+                <div id="cookie-settings-status" class="settings-status cookie-settings-status" aria-live="polite" style="display:none;"></div>
+            </div>
             <div class="settings-actions">
                 <button type="button" id="settings-new" class="button button-primary">新規設定</button>
                 <button type="button" id="settings-reload" class="button">SharePointから再読込</button>
@@ -208,6 +309,8 @@
     <script src="js/util.js"></script>
     <script src="js/csv-data-source.js"></script>
     <script src="js/sharepoint-data-source.js"></script>
+    <script src="js/history-data-source.js"></script>
+    <script src="js/access-counter.js"></script>
     <script src="js/sharepoint-settings-data-source.js"></script>
     <script src="js/data-service.js"></script>
     <script src="js/settings-controller.js"></script>

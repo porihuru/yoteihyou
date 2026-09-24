@@ -64,6 +64,31 @@ function createRow(id, title, start, end, category, location, description, group
     };
 }
 
+function isEvenlySelected(index, total, selectedCount) {
+    return Math.floor((index + 1) * selectedCount / total) >
+        Math.floor(index * selectedCount / total);
+}
+
+function reducePeriodTargets(rows, specialCount) {
+    var regularCount = rows.length - specialCount;
+    var weeklyCount = Math.round(rows.length * 0.5) - specialCount;
+    var monthlyCount = Math.round(rows.length * 0.2) - specialCount;
+    var weeklyIndex = 0;
+    var targets;
+    var i;
+    for (i = 0; i < regularCount; i += 1) {
+        targets = ["日々"];
+        if (isEvenlySelected(i, regularCount, weeklyCount)) {
+            targets.push("週間");
+            if (isEvenlySelected(weeklyIndex, weeklyCount, monthlyCount)) {
+                targets.push("月間");
+            }
+            weeklyIndex += 1;
+        }
+        rows[i].Purpose = rows[i].Purpose.replace(/｜.*$/, "｜" + targets.join("・"));
+    }
+}
+
 function buildRows() {
     var rows = [];
     var firstDay = new Date(Date.UTC(2026, 8, 1));
@@ -80,7 +105,8 @@ function buildRows() {
     var extraIndex;
 
     while (date.getTime() <= lastDay.getTime()) {
-        for (groupIndex = 0; groupIndex < GROUPS.length; groupIndex += 1) {
+        if (date.getUTCDay() !== 0 && date.getUTCDay() !== 6) {
+            for (groupIndex = 0; groupIndex < GROUPS.length; groupIndex += 1) {
             group = GROUPS[groupIndex];
             startMinutes = 8 * 60 + ((dayIndex * 2 + groupIndex * 3) % 28) * 15;
             durationMinutes = 45 + ((dayIndex + groupIndex) % 3) * 15;
@@ -93,7 +119,7 @@ function buildRows() {
                 end,
                 CATEGORIES[(dayIndex + groupIndex) % CATEGORIES.length],
                 LOCATIONS[(dayIndex * 2 + groupIndex) % LOCATIONS.length],
-                formatDate(date) + "のサンプル予定です。日々・週間・月間表示で使用します。",
+                formatDate(date) + "のサンプル予定です。反映先は目的列の設定に従います。",
                 group
             ));
             id += 1;
@@ -113,11 +139,23 @@ function buildRows() {
                     id += 1;
                 }
             }
+            }
         }
         date = addDays(date, 1);
         dayIndex += 1;
     }
 
+    rows.push(createRow(
+        id,
+        "GP1 日またぎ予定",
+        "2026-09-08 22:00",
+        "2026-09-09 02:00",
+        "夜間対応",
+        "オンライン",
+        "開始日から翌日にまたがる予定の表示確認用です。",
+        "GP1"
+    ));
+    id += 1;
     rows.push(createRow(
         id,
         "GP1 月またぎ計画",
@@ -140,6 +178,7 @@ function buildRows() {
         "GP1"
     ));
 
+    reducePeriodTargets(rows, 3);
     return rows;
 }
 

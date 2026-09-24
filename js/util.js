@@ -92,6 +92,19 @@
         return text === "true" || text === "1" || text === "yes" || text === "はい" || text === "○";
     }
 
+    function normalizeLineStyle(value) {
+        return trim(value).toLowerCase() === "dotted" ? "dotted" : "solid";
+    }
+
+    function normalizeLineColor(value) {
+        var color = trim(value).toLowerCase();
+        return color === "red" || color === "green" || color === "brown" ? color : "default";
+    }
+
+    function normalizeTextColor(value) {
+        return normalizeLineColor(value);
+    }
+
     function addEvent(element, eventName, handler) {
         if (element.addEventListener) {
             element.addEventListener(eventName, handler, false);
@@ -128,6 +141,9 @@
         parseDate: parseDate,
         toIsoString: toIsoString,
         isTrue: isTrue,
+        normalizeLineStyle: normalizeLineStyle,
+        normalizeLineColor: normalizeLineColor,
+        normalizeTextColor: normalizeTextColor,
         addEvent: addEvent,
         getJson: getJson,
         getErrorMessage: getErrorMessage

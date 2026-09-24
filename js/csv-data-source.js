@@ -76,6 +76,13 @@
             location: util.trim(source.Location),
             description: util.trim(source.Description),
             purpose: util.trim(source.Purpose),
+            lineStyle: util.normalizeLineStyle(source.LineStyle),
+            lineColor: util.normalizeLineColor(source.LineColor),
+            textColor: util.normalizeTextColor(source.TextColor),
+            createdBy: "",
+            createdAt: null,
+            modifiedBy: "",
+            modifiedAt: null,
             sortOrder: 0,
             isActive: true,
             source: "csv"

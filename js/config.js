@@ -31,6 +31,13 @@
             siteUrl: "",
             listTitle: "予定表",
             pageSize: 500,
+            history: {
+                listTitle: "予定表操作履歴"
+            },
+            accessCounter: {
+                listTitle: "予定表アクセスカウンター",
+                itemTitle: "予定表"
+            },
             organizationSettings: {
                 enabled: true,
                 listTitle: "予定表組織設定",
@@ -56,7 +63,14 @@
                 category: "Category",
                 location: "Location",
                 description: "Description",
-                purpose: "Purpose"
+                purpose: "Purpose",
+                lineStyle: "LineStyle",
+                lineColor: "LineColor",
+                textColor: "TextColor",
+                created: "Created",
+                modified: "Modified",
+                author: "Author",
+                editor: "Editor"
             }
         }
     };
