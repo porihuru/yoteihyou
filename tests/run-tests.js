@@ -178,6 +178,41 @@ test("SharePointの設定項目を組織設定へ変換できる", function () {
     assert.strictEqual(converted.groups[1].autoRows, true);
 });
 
+test("設定画面はパスワードsnkを入力したときだけ開く", function () {
+    var script = fs.readFileSync(path.join(root, "js/settings-controller.js"), "utf8");
+    var panel = {style: {display: "none"}};
+    var input = null;
+    var alerts = 0;
+    var opened = 0;
+    var controller;
+    var scope = vm.createContext({
+        SettingsController: function () {},
+        window: {
+            prompt: function () { return input; },
+            alert: function () { alerts += 1; }
+        },
+        byId: function () { return panel; }
+    });
+    vm.runInContext(script.slice(script.indexOf("    SettingsController.prototype.open = function"),
+        script.indexOf("    SettingsController.prototype.close = function")), scope);
+    controller = new scope.SettingsController();
+    controller.onOpen = function () { opened += 1; };
+    controller.clearForm = function () {};
+    controller.renderItems = function () {};
+    controller.load = function () {};
+    controller.open();
+    assert.strictEqual(panel.style.display, "none");
+    assert.strictEqual(alerts, 0);
+    input = "wrong";
+    controller.open();
+    assert.strictEqual(panel.style.display, "none");
+    assert.strictEqual(alerts, 1);
+    input = "snk";
+    controller.open();
+    assert.strictEqual(panel.style.display, "block");
+    assert.strictEqual(opened, 1);
+});
+
 test("組織設定の更新時にETagを送る", function () {
     var source = new OrganizationSettingsDataSource(organizationSettingsOptions);
     var sentHeaders;
@@ -385,6 +420,7 @@ test("CSV履歴にサンプルと画面内操作を表示する", function () {
     assert.strictEqual(counts.delete, 10);
     assert.ok(samples.some(function (entry) { return entry.at.getMonth() === 8; }));
     assert.ok(samples.some(function (entry) { return entry.at.getMonth() === 9; }));
+    service.history.load = function (success) { success([]); };
     service.setEditingEnabled(true);
     service.create(item, function () {}, function (message) { throw new Error(message); });
     service.loadHistory(function (entries) { history = entries; }, function (message) { throw new Error(message); });
@@ -421,6 +457,144 @@ test("SharePoint履歴は変更前後を保存し古い履歴を300件に整理�
     assert.strictEqual(JSON.parse(JSON.parse(requests[0].body).AfterJson).title, "変更後");
     assert.ok(requests[2].url.indexOf("items(1)") >= 0);
     assert.strictEqual(requests[2].headers["X-HTTP-Method"], "DELETE");
+});
+
+test("組織設定の履歴は同じSharePoint履歴リストに変更前後を記録する", function () {
+    var history = new HistoryDataSource(organizationSettingsOptions);
+    var requests = [];
+    var before = {id: 12, groupName: "GP1科", teamName: "GS班", monthlyRows: 5,
+        weeklyRows: 3, dailyRows: 2, autoRows: true, sortOrder: 0, isActive: true};
+    var after = {id: 12, groupName: "GP1科", teamName: "GS班", monthlyRows: 4,
+        weeklyRows: 3, dailyRows: 2, autoRows: false, sortOrder: 1, isActive: true};
+    var saved = false;
+    var payload;
+    history.api.getEntityType = function (success) { success("SP.Data.HistoryListItem"); };
+    history.api.getDigest = function (success) { success("digest"); };
+    history.api.request = function (method, url, headers, body, success) {
+        requests.push({method: method, body: body});
+        success({responseText: method === "GET" ? JSON.stringify({d: {results: []}}) : ""});
+    };
+    history.recordSettings("update", before, after, function () { saved = true; }, function (message) {
+        throw new Error(message);
+    });
+    assert.strictEqual(saved, true);
+    payload = JSON.parse(requests[0].body);
+    assert.strictEqual(payload.Action, "update");
+    assert.strictEqual(payload.ScheduleList, "予定表組織設定");
+    assert.strictEqual(payload.ScheduleItemId, "12");
+    assert.strictEqual(payload.Title, "GP1科／GS班");
+    assert.strictEqual(JSON.parse(payload.BeforeJson).monthlyRows, 5);
+    assert.strictEqual(JSON.parse(payload.AfterJson).monthlyRows, 4);
+    assert.strictEqual(JSON.parse(payload.AfterJson).autoRows, false);
+    assert.strictEqual(JSON.parse(payload.AfterJson).etag, undefined);
+    assert.strictEqual(history.toEntry({ID: 3, Action: "update", BeforeJson: payload.BeforeJson,
+        AfterJson: payload.AfterJson, ScheduleList: payload.ScheduleList,
+        Author: {Title: "操作者"}}).actor, "操作者");
+    history.recordSampleSettings("update", before, after);
+    assert.strictEqual(history.getSample()[0].scheduleList, "予定表組織設定");
+});
+
+test("CSV表示中もSharePointの組織設定履歴を表示し取得失敗時は画面内履歴へ戻る", function () {
+    var service = new DataService({csv: {url: "data/schedule.csv"},
+        sharePoint: organizationSettingsOptions, defaultDataSource: "csv"});
+    var settingsEntry = {action: "update", after: {kind: "organizationSettings", title: "GP1"}};
+    var entries;
+    var warning;
+    service.history.load = function (success) {
+        success([settingsEntry, {action: "create", after: {title: "実際の予定"}}]);
+    };
+    service.loadHistory(function (items, message) { entries = items; warning = message; }, function () {});
+    assert.strictEqual(entries.length, 31);
+    assert.strictEqual(entries[0], settingsEntry);
+    assert.strictEqual(warning, "");
+    service.history.recordSettings = function (action, before, after, success) { success(); };
+    service.recordSettingsChange("create", null, {id: 2, groupName: "GP2"}, function (message) {
+        assert.strictEqual(message, "");
+    });
+    assert.strictEqual(service.history.getSample()[0].after.kind, "organizationSettings");
+    service.history.load = function (success, failure) { failure("権限なし"); };
+    service.loadHistory(function (items, message) { entries = items; warning = message; }, function () {});
+    assert.strictEqual(entries[0].after.groupName, "GP2");
+    assert.ok(warning.indexOf("権限なし") >= 0);
+});
+
+test("履歴詳細では組織設定の行数と有効状態を表示する", function () {
+    var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var detail = {innerHTML: ""};
+    var scope = vm.createContext({
+        byId: function () { return detail; },
+        util: {escapeHtml: function (value) { return String(value); }},
+        config: {sharePoint: {listTitle: "予定表"}},
+        historyActionLabel: function () { return "更新"; },
+        historyDate: function () { return "2026-09-26 12:00"; }
+    });
+    vm.runInContext(app.slice(app.indexOf("    function renderHistoryDetail("),
+        app.indexOf("    function renderHistory(")), scope);
+    scope.renderHistoryDetail({action: "update", actor: "操作者", scheduleList: "予定表組織設定",
+        before: {kind: "organizationSettings", id: "3", groupName: "GP1", monthlyRows: 5,
+            weeklyRows: 3, dailyRows: 1, autoRows: true, sortOrder: 0, isActive: true},
+        after: {kind: "organizationSettings", id: "3", groupName: "GP1", monthlyRows: 4,
+            weeklyRows: 3, dailyRows: 1, autoRows: false, sortOrder: 1, isActive: false}});
+    assert.ok(detail.innerHTML.indexOf("設定ID: 3") >= 0);
+    assert.ok(detail.innerHTML.indexOf("月間行数") >= 0);
+    assert.ok(detail.innerHTML.indexOf("<td>5</td><td>4</td>") >= 0);
+    assert.ok(detail.innerHTML.indexOf("<td>はい</td><td>いいえ</td>") >= 0);
+    assert.ok(detail.innerHTML.indexOf("<td>0</td><td>1</td>") >= 0);
+});
+
+test("組織設定の追加・更新・削除が成功した後だけ履歴を記録する", function () {
+    var script = fs.readFileSync(path.join(root, "js/settings-controller.js"), "utf8");
+    var records = [];
+    var reloads = [];
+    var item = {groupName: "GP1", teamName: "", monthlyRows: 5};
+    var before = {id: 4, groupName: "GP1", teamName: "", monthlyRows: 3};
+    var failSave = false;
+    var source = {
+        canConnect: function () { return true; },
+        create: function (value, success) { success({id: 8, groupName: value.groupName}); },
+        update: function (value, success, failure) {
+            if (failSave) { failure("保存失敗"); }
+            else { success(value); }
+        },
+        remove: function (value, success) { success(value); }
+    };
+    var scope = vm.createContext({
+        SettingsController: function () {},
+        window: {confirm: function () { return true; }},
+        byId: function () { return {}; }
+    });
+    var controller;
+    vm.runInContext(script.slice(script.indexOf("    SettingsController.prototype.save = function"),
+        script.indexOf("    SettingsController.prototype.initialize = function")), scope);
+    controller = new scope.SettingsController();
+    controller.source = source;
+    controller.canEdit = function () { return true; };
+    controller.readForm = function () { return item; };
+    controller.setBusy = function () {};
+    controller.setStatus = function () {};
+    controller.clearForm = function () {};
+    controller.load = function (showMessage, warning) { reloads.push({showMessage: showMessage, warning: warning}); };
+    controller.recordChange = function (action, previous, current, done) {
+        records.push({action: action, before: previous, after: current});
+        done(action === "delete" ? "履歴失敗" : "");
+    };
+    controller.save({preventDefault: function () {}});
+    assert.strictEqual(records[0].action, "create");
+    assert.strictEqual(records[0].before, null);
+    assert.strictEqual(records[0].after.id, 8);
+    item = {id: 4, groupName: "GP1", teamName: "", monthlyRows: 5};
+    controller.editingItem = before;
+    controller.save({preventDefault: function () {}});
+    assert.strictEqual(records[1].action, "update");
+    assert.strictEqual(records[1].before.monthlyRows, 3);
+    assert.strictEqual(records[1].after.monthlyRows, 5);
+    failSave = true;
+    controller.save({preventDefault: function () {}});
+    assert.strictEqual(records.length, 2);
+    controller.remove();
+    assert.strictEqual(records[2].action, "delete");
+    assert.strictEqual(records[2].after, null);
+    assert.strictEqual(reloads[2].warning, "履歴失敗");
 });
 
 test("予定変更後の履歴記録失敗は予定成功と警告を返す", function () {

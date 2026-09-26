@@ -2519,7 +2519,13 @@
 
     function renderHistoryDetail(entry) {
         var detail = byId("history-detail");
-        var fields = [
+        var isSettings = (entry.after || entry.before || {}).kind === "organizationSettings";
+        var fields = isSettings ? [
+            {key: "groupName", label: "大グループ"}, {key: "teamName", label: "小グループ"},
+            {key: "monthlyRows", label: "月間行数"}, {key: "weeklyRows", label: "週間行数"},
+            {key: "dailyRows", label: "日々行数"}, {key: "autoRows", label: "行数を自動調整"},
+            {key: "sortOrder", label: "表示順"}, {key: "isActive", label: "有効"}
+        ] : [
             {key: "title", label: "件名"}, {key: "purpose", label: "グループ・反映先"},
             {key: "startDate", label: "開始日時"}, {key: "endDate", label: "終了日時"},
             {key: "allDay", label: "終日"}, {key: "category", label: "区分"},
@@ -2529,8 +2535,9 @@
         ];
         var html = "<h3>詳細</h3><p>" + util.escapeHtml(historyActionLabel(entry.action)) + " / " +
             util.escapeHtml(historyDate(entry.at)) + "<br>操作者: " + util.escapeHtml(entry.actor || "情報なし") +
-            "<br>予定リスト: " + util.escapeHtml(entry.scheduleList || config.sharePoint.listTitle) +
-            "<br>予定ID: " + util.escapeHtml((entry.after || entry.before || {}).id || entry.itemId || "情報なし") + "</p>";
+            "<br>対象リスト: " + util.escapeHtml(entry.scheduleList || config.sharePoint.listTitle) +
+            "<br>" + (isSettings ? "設定ID: " : "予定ID: ") +
+            util.escapeHtml((entry.after || entry.before || {}).id || entry.itemId || "情報なし") + "</p>";
         var i;
         var before;
         var after;
@@ -2538,11 +2545,12 @@
             var value = snapshot ? snapshot[key] : "";
             if (key === "startDate" || key === "endDate") { return value ? historyDate(value) : ""; }
             if (key === "allDay") { return value ? "はい" : "いいえ"; }
+            if (key === "autoRows" || key === "isActive") { return value ? "はい" : "いいえ"; }
             if (key === "lineStyle") { return value === "dotted" ? "点線" : "実線"; }
             if (key === "lineColor" || key === "textColor") {
                 return value === "red" ? "赤" : value === "green" ? "緑" : value === "brown" ? "茶" : "標準（青）";
             }
-            return String(value || "");
+            return value === null || typeof value === "undefined" ? "" : String(value);
         }
         html += "<table class=\"history-detail-table\"><thead><tr><th>項目</th><th>変更前</th><th>変更後</th></tr></thead><tbody>";
         for (i = 0; i < fields.length; i += 1) {
@@ -2571,6 +2579,7 @@
             button.type = "button";
             button.className = "history-entry";
             button.innerHTML = "<strong>" + util.escapeHtml(historyActionLabel(entry.action)) + "</strong> " +
+                ((entry.after || entry.before || {}).kind === "organizationSettings" ? "[組織設定] " : "") +
                 util.escapeHtml((entry.after || entry.before || {}).title || entry.title || "（件名なし）") +
                 "<br><span>" + util.escapeHtml(historyDate(entry.at)) + " / " +
                 util.escapeHtml(entry.actor || "情報なし") + "</span>";
@@ -2590,13 +2599,14 @@
         byId("history-panel").style.display = "block";
         setEditorLayoutOpen(true);
         byId("history-status").innerHTML = service.getMode() === "csv" ?
-            "試験用CSVのサンプル履歴です。今回の画面操作も表示しますが、保存されません。" : "SharePointから読込中…";
+            "試験用CSVの予定履歴とSharePointの組織設定履歴を読込中…" : "SharePointから読込中…";
         byId("history-list").innerHTML = "";
         byId("history-detail").innerHTML = "";
-        service.loadHistory(function (entries) {
+        service.loadHistory(function (entries, warning) {
             if (requestId !== historyRequestId) { return; }
             byId("history-status").innerHTML = service.getMode() === "csv" ?
-                "試験用CSVのサンプル履歴です。今回の画面操作も表示しますが、保存されません。" :
+                util.escapeHtml("試験用CSVの予定履歴は画面内のみです。組織設定の履歴はSharePointに保存します。" +
+                    (warning ? " " + warning : "")) :
                 util.escapeHtml("最新" + entries.length + "件を表示（上限300件）");
             renderHistory(entries);
         }, function (message) {
@@ -3428,6 +3438,9 @@
             source: organizationSettingsSource,
             baseConfig: organizationConfig,
             canEdit: function () { return !service.isReadOnly(); },
+            recordChange: function (action, before, after, done) {
+                service.recordSettingsChange(action, before, after, done);
+            },
             onOpen: function () {
                 closeEditor();
                 closeHistory();

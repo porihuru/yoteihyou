@@ -22,6 +22,23 @@
         };
     }
 
+    function settingsSnapshot(item) {
+        if (!item) { return null; }
+        return {
+            kind: "organizationSettings",
+            id: String(item.id || ""),
+            title: (item.groupName || "") + (item.teamName ? "／" + item.teamName : ""),
+            groupName: item.groupName || "",
+            teamName: item.teamName || "",
+            monthlyRows: item.monthlyRows,
+            weeklyRows: item.weeklyRows,
+            dailyRows: item.dailyRows,
+            autoRows: item.autoRows !== false,
+            sortOrder: item.sortOrder,
+            isActive: item.isActive !== false
+        };
+    }
+
     function buildSampleItems() {
         var titles = ["日次確認", "進捗会議", "資料レビュー", "作業調整", "設備点検",
             "引継ぎ", "週次報告", "現地確認", "打合せ", "月次準備"];
@@ -83,6 +100,8 @@
         var history = options.history || {};
         this.listTitle = history.listTitle || "予定表操作履歴";
         this.scheduleListTitle = options.listTitle || "予定表";
+        this.settingsListTitle = options.organizationSettings && options.organizationSettings.listTitle ||
+            "予定表組織設定";
         this.api = new window.YoteihyouSharePointDataSource({
             siteUrl: options.siteUrl,
             listTitle: this.listTitle,
@@ -105,6 +124,19 @@
             at: new Date(),
             before: snapshot(before),
             after: snapshot(after)
+        });
+        if (this.sessionItems.length > MAX_HISTORY) { this.sessionItems.length = MAX_HISTORY; }
+    };
+
+    HistoryDataSource.prototype.recordSampleSettings = function (action, before, after) {
+        this.sessionItems.unshift({
+            id: "settings-session-" + String(new Date().getTime()) + "-" + String(this.sessionItems.length),
+            action: action,
+            actor: "組織設定（この画面）",
+            at: new Date(),
+            before: settingsSnapshot(before),
+            after: settingsSnapshot(after),
+            scheduleList: this.settingsListTitle
         });
         if (this.sessionItems.length > MAX_HISTORY) { this.sessionItems.length = MAX_HISTORY; }
     };
@@ -191,10 +223,8 @@
         readPage(url);
     };
 
-    HistoryDataSource.prototype.record = function (action, before, after, success, failure) {
+    HistoryDataSource.prototype.recordEntry = function (action, prior, current, listTitle, success, failure) {
         var self = this;
-        var prior = snapshot(before);
-        var current = snapshot(after);
         var target = current || prior || {};
         this.api.getEntityType(function (entityType) {
             self.api.getDigest(function (digest) {
@@ -203,7 +233,7 @@
                     Title: target.title || "（件名なし）",
                     Action: action,
                     ScheduleItemId: target.id || "",
-                    ScheduleList: self.scheduleListTitle,
+                    ScheduleList: listTitle,
                     BeforeJson: prior ? JSON.stringify(prior) : "",
                     AfterJson: current ? JSON.stringify(current) : ""
                 };
@@ -216,6 +246,15 @@
                 }, failure);
             }, failure);
         }, failure);
+    };
+
+    HistoryDataSource.prototype.record = function (action, before, after, success, failure) {
+        this.recordEntry(action, snapshot(before), snapshot(after), this.scheduleListTitle, success, failure);
+    };
+
+    HistoryDataSource.prototype.recordSettings = function (action, before, after, success, failure) {
+        this.recordEntry(action, settingsSnapshot(before), settingsSnapshot(after),
+            this.settingsListTitle, success, failure);
     };
 
     window.YoteihyouHistoryDataSource = HistoryDataSource;

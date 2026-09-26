@@ -75,10 +75,40 @@
 
     DataService.prototype.loadHistory = function (success, failure) {
         if (this.mode === "csv") {
-            success(this.history.getSample());
+            var self = this;
+            var local = this.history.getSample();
+            if (!this.history.api.siteUrl) {
+                success(local, "SharePoint未接続のため、組織設定の共有履歴は取得できません。");
+                return;
+            }
+            this.history.load(function (entries) {
+                var settings = [];
+                var i;
+                for (i = 0; i < entries.length; i += 1) {
+                    if (((entries[i].after || entries[i].before) || {}).kind === "organizationSettings") {
+                        settings.push(entries[i]);
+                    }
+                }
+                local = self.history.getSample().filter(function (entry) {
+                    return ((entry.after || entry.before) || {}).kind !== "organizationSettings";
+                });
+                success(settings.concat(local).slice(0, 300), "");
+            }, function (message) {
+                success(local, "組織設定の共有履歴を取得できませんでした。" + message);
+            });
         } else {
             this.history.load(success, failure);
         }
+    };
+
+    DataService.prototype.recordSettingsChange = function (action, before, after, done) {
+        var self = this;
+        this.history.recordSettings(action, before, after, function () {
+            if (self.mode === "csv") { self.history.recordSampleSettings(action, before, after); }
+            done("");
+        }, function (message) {
+            done(message);
+        });
     };
 
     window.YoteihyouDataService = DataService;

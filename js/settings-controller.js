@@ -22,6 +22,7 @@
         this.baseConfig = options.baseConfig;
         this.onApply = options.onApply;
         this.onOpen = options.onOpen;
+        this.recordChange = options.recordChange || function (action, before, after, done) { done(""); };
         this.canEdit = options.canEdit || function () { return true; };
         this.items = [];
         this.editingItem = null;
@@ -168,7 +169,7 @@
         return item;
     };
 
-    SettingsController.prototype.load = function (showMessage) {
+    SettingsController.prototype.load = function (showMessage, historyWarning) {
         var self = this;
         var requestId = this.loadRequestId + 1;
         this.loadRequestId = requestId;
@@ -186,14 +187,16 @@
             self.loaded = true;
             self.renderItems();
             self.onApply(self.source.toOrganizationConfig(items, self.baseConfig));
-            self.setStatus(showMessage ? "組織設定を再読込しました。" : "SharePointの組織設定を使用しています。", false);
+            self.setStatus((showMessage ? "組織設定を再読込しました。" : "SharePointの組織設定を使用しています。") +
+                (historyWarning ? " 履歴の記録または整理に失敗しました。" + historyWarning : ""), !!historyWarning);
             self.setBusy(false);
         }, function (message) {
             if (requestId !== self.loadRequestId) {
                 return;
             }
             self.setStatus(
-                message + (self.loaded ? " 現在表示中の設定を維持します。" : " organizations.jsの設定を使用します。"),
+                message + (self.loaded ? " 現在表示中の設定を維持します。" : " organizations.jsの設定を使用します。") +
+                    (historyWarning ? " 履歴の記録または整理にも失敗しました。" + historyWarning : ""),
                 true
             );
             self.setBusy(false);
@@ -201,6 +204,12 @@
     };
 
     SettingsController.prototype.open = function () {
+        var password = window.prompt("設定を開くためのパスワードを入力してください。", "");
+        if (password === null) { return; }
+        if (password !== "snk") {
+            window.alert("パスワードが違います。");
+            return;
+        }
         this.onOpen();
         byId("settings-panel").style.display = "block";
         this.clearForm();
@@ -217,6 +226,7 @@
         var self = this;
         var item;
         var isUpdate;
+        var before;
         if (event && event.preventDefault) {
             event.preventDefault();
         } else if (window.event) {
@@ -237,11 +247,14 @@
             return false;
         }
         isUpdate = !!item.id;
+        before = isUpdate ? this.editingItem : null;
         this.setBusy(true);
         this.setStatus("設定を保存しています。", false);
-        (isUpdate ? this.source.update : this.source.create).call(this.source, item, function () {
-            self.clearForm();
-            self.load(true);
+        (isUpdate ? this.source.update : this.source.create).call(this.source, item, function (saved) {
+            self.recordChange(isUpdate ? "update" : "create", before, saved || item, function (warning) {
+                self.clearForm();
+                self.load(true, warning);
+            });
         }, function (message) {
             self.setStatus(message, true);
             self.setBusy(false);
@@ -262,8 +275,10 @@
         this.setBusy(true);
         this.setStatus("設定を削除しています。", false);
         this.source.remove(item, function () {
-            self.clearForm();
-            self.load(true);
+            self.recordChange("delete", item, null, function (warning) {
+                self.clearForm();
+                self.load(true, warning);
+            });
         }, function (message) {
             self.setStatus(message, true);
             self.setBusy(false);
