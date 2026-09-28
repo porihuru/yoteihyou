@@ -18,6 +18,10 @@
     var accessCounter = new window.YoteihyouAccessCounter(config.sharePoint);
     var organizationSettingsSource = new window.YoteihyouOrganizationSettingsDataSource(config.sharePoint);
     var settingsController = null;
+    var currentFontSize = 14;
+    var displaySettingsSource = new window.YoteihyouDisplaySettingsDataSource(config.sharePoint);
+    var sharedFontSettings = null;
+    var fontSettingsBusy = false;
     var state = {
         viewMode: "monthly",
         displayDate: startOfDay(new Date()),
@@ -496,7 +500,7 @@
     }
 
     function clearDisplayPreferenceCookies() {
-        var preferenceNames = ["viewMode", "darkMode", "zoom", "groups"];
+        var preferenceNames = ["viewMode", "darkMode", "zoom", "groups", "fontFamily", "fontSize"];
         var modes = ["daily", "weekly", "monthly"];
         var printNames = ["paper", "orientation", "scaleX", "scaleY", "groups"];
         var i;
@@ -571,6 +575,81 @@
         updateFixedHeader();
     }
 
+    function setFontPreferences(family, size) {
+        var fonts = {
+            "default": '"Yu Gothic UI", "Meiryo", sans-serif',
+            meiryo: '"Meiryo", sans-serif',
+            gothic: '"MS Gothic", "Meiryo", monospace',
+            mincho: '"MS Mincho", "Yu Mincho", serif'
+        };
+        if (!Object.prototype.hasOwnProperty.call(fonts, family)) { family = "default"; }
+        size = Number(size);
+        if ([12, 14, 16, 18, 20].indexOf(size) < 0) { size = 14; }
+        currentFontSize = size;
+        document.body.style.fontFamily = fonts[family];
+        document.documentElement.style.fontSize = size + "px";
+        byId("setting-font-family").value = family;
+        byId("setting-font-size").value = String(size);
+    }
+
+    function fontSettingsStatus(message, error) {
+        var element = byId("font-settings-status");
+        element.className = "settings-status" + (error ? " error" : "");
+        element.innerHTML = util.escapeHtml(message);
+    }
+
+    function setFontSettingsBusy(busy) {
+        fontSettingsBusy = busy;
+        byId("save-font-settings").disabled = busy;
+        byId("reload-font-settings").disabled = busy;
+        byId("setting-font-family").disabled = busy;
+        byId("setting-font-size").disabled = busy;
+    }
+
+    function loadFontSettings(message) {
+        if (fontSettingsBusy) { return; }
+        setFontSettingsBusy(true);
+        fontSettingsStatus("文字設定を読み込んでいます。", false);
+        displaySettingsSource.load(function (item) {
+            sharedFontSettings = item;
+            setFontPreferences(item.family, item.size);
+            renderCurrentView();
+            updateFixedHeader();
+            setFontSettingsBusy(false);
+            fontSettingsStatus(message || "リストの文字設定を使用しています。", false);
+        }, function (error) {
+            sharedFontSettings = null;
+            setFontSettingsBusy(false);
+            fontSettingsStatus((message ? message + " 再読込に失敗しました。 " : "") + error, true);
+        });
+    }
+
+    function saveFontSettings() {
+        if (fontSettingsBusy) { return; }
+        if (service.isReadOnly()) {
+            fontSettingsStatus("保存するには「予定表更新」を押してください。", true);
+            return;
+        }
+        setFontSettingsBusy(true);
+        fontSettingsStatus("文字設定を保存しています。", false);
+        displaySettingsSource.save(sharedFontSettings, byId("setting-font-family").value,
+            byId("setting-font-size").value, function () {
+                sharedFontSettings = null;
+                setFontSettingsBusy(false);
+                loadFontSettings("文字設定をリストに保存しました。");
+            }, function (error) {
+                setFontSettingsBusy(false);
+                fontSettingsStatus(error, true);
+            });
+    }
+
+    function changeFontPreferences() {
+        setFontPreferences(byId("setting-font-family").value, byId("setting-font-size").value);
+        fontSettingsStatus("未保存の文字設定を表示しています。リストに保存してください。", false);
+        renderCurrentView();
+        updateFixedHeader();
+    }
+
     function initializeDisplayPreferences() {
         var storedViewMode = readDisplayPreference("viewMode");
         var storedZoom = parseInt(readDisplayPreference("zoom"), 10);
@@ -582,6 +661,7 @@
             storedZoom = 100;
         }
         setDisplayZoom(storedZoom, false);
+        setFontPreferences("default", 14);
         loadOrganizationCollapseState();
     }
 
@@ -1665,7 +1745,7 @@
             code = text.charCodeAt(i);
             width += code <= 255 ? (text.charAt(i) === " " ? 4 : 7) : 13;
         }
-        return Math.max(120, width);
+        return Math.max(120, width * currentFontSize / 14);
     }
 
     function isDailyRangeTrigger(item, day) {
@@ -1730,7 +1810,7 @@
     }
 
     function getDailyLaneMetrics() {
-        var contentHeight = 37;
+        var contentHeight = Math.ceil(37 * currentFontSize / 14);
         var bodyVerticalPadding = 1;
         var eventHeight = contentHeight + bodyVerticalPadding * 2;
         var laneGap = 2;
@@ -1793,6 +1873,7 @@
             groupBorderMargin = getDailyGroupLayout(1).groupBorderMargin;
         }
         button.style.top = (groupBorderMargin + laneIndex * laneMetrics.laneHeight) + "px";
+        button.style.height = laneMetrics.eventHeight + "px";
         button.title = item.title + " / " + util.formatDateTime(item.startDate) + "～" +
             util.formatDateTime(item.endDate || item.startDate) + (item.location ? " / " + item.location : "");
 
@@ -3277,6 +3358,10 @@
         util.addEvent(byId("zoom-in"), "click", function () {
             setDisplayZoom(currentDisplayZoom + DISPLAY_ZOOM_STEP, true);
         });
+        util.addEvent(byId("setting-font-family"), "change", changeFontPreferences);
+        util.addEvent(byId("save-font-settings"), "click", saveFontSettings);
+        util.addEvent(byId("reload-font-settings"), "click", function () { loadFontSettings(); });
+        util.addEvent(byId("setting-font-size"), "change", changeFontPreferences);
         util.addEvent(byId("reset-display-cookies"), "click", resetDisplayPreferences);
         util.addEvent(byId("print-view"), "click", function () {
             printCurrentView();
@@ -3453,6 +3538,7 @@
         });
         settingsController.initialize();
         renderCurrentView();
+        loadFontSettings();
         reloadData("");
     }
 

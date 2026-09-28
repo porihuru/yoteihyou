@@ -234,13 +234,39 @@
 
         <div id="settings-panel" class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title" style="display:none;">
             <div class="settings-header">
-                <h2 id="settings-title">組織設定</h2>
+                <h2 id="settings-title">設定</h2>
                 <button type="button" id="close-settings" class="button">閉じる</button>
             </div>
             <div id="settings-status" class="settings-status" aria-live="polite"></div>
             <div class="cookie-settings">
+                <strong>共通の文字設定</strong>
+                <div class="font-settings">
+                    <label for="setting-font-family">文字のフォント
+                        <select id="setting-font-family">
+                            <option value="default">標準（Yu Gothic UI）</option>
+                            <option value="meiryo">メイリオ</option>
+                            <option value="gothic">ＭＳ ゴシック</option>
+                            <option value="mincho">ＭＳ 明朝</option>
+                        </select>
+                    </label>
+                    <label for="setting-font-size">文字の大きさ
+                        <select id="setting-font-size">
+                            <option value="12">小（12px）</option>
+                            <option value="14">標準（14px）</option>
+                            <option value="16">大（16px）</option>
+                            <option value="18">特大（18px）</option>
+                            <option value="20">最大（20px）</option>
+                        </select>
+                    </label>
+                </div>
+                <p>選択すると表示を確認できます。「文字設定をリストに保存」で全利用者の共通設定として保存します。保存には「予定表更新」が必要です。端末にないフォントは代替フォントで表示します。</p>
+                <button type="button" id="save-font-settings" class="button button-primary">文字設定をリストに保存</button>
+                <button type="button" id="reload-font-settings" class="button">文字設定を再読込</button>
+                <div id="font-settings-status" class="settings-status" aria-live="polite"></div>
+            </div>
+            <div class="cookie-settings">
                 <strong>この端末の表示設定</strong>
-                <p>この予定表のグループ開閉状態、表示モード、ダークモード、倍率、印刷設定をCookieに保存します。初期化すると、これらの設定を削除します。</p>
+                <p>グループ開閉状態、表示モード、ダークモード、倍率、印刷設定をCookieに保存します。初期化すると、これらの設定を削除します。リストの文字設定は変更しません。</p>
                 <button type="button" id="reset-display-cookies" class="button">表示設定Cookieを初期化</button>
                 <div id="cookie-settings-status" class="settings-status cookie-settings-status" aria-live="polite" style="display:none;"></div>
             </div>
@@ -312,6 +338,7 @@
     <script src="js/history-data-source.js"></script>
     <script src="js/access-counter.js"></script>
     <script src="js/sharepoint-settings-data-source.js"></script>
+    <script src="js/display-settings-data-source.js"></script>
     <script src="js/data-service.js"></script>
     <script src="js/settings-controller.js"></script>
     <script src="js/date-time-editor.js"></script>

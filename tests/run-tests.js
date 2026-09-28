@@ -1106,7 +1106,7 @@ test("行数の自動調整は不要な空き行を表示しない", function ()
     var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
     var settingsSource = fs.readFileSync(path.join(root, "js/settings-controller.js"), "utf8");
-    var scope = vm.createContext({Math: Math});
+    var scope = vm.createContext({Math: Math, currentFontSize: 14});
     var start = appSource.indexOf("    function getRenderedRowCount(");
     var end = appSource.indexOf("    function getOrganizationKey(");
 
@@ -1130,6 +1130,7 @@ test("短時間予定の横線は文字枠を広げても実時刻に一致す�
         },
         util: util,
         formatDailyTime: function (value) { return String(value); },
+        currentFontSize: 14,
         dailyInteraction: {selectedItemId: "", clipboard: null}
     });
     vm.runInContext(source.slice(source.indexOf("    function getDailyCaptionText("),
@@ -1165,7 +1166,7 @@ test("短時間予定の横線は文字枠を広げても実時刻に一致す�
 test("日々予定は文字の高さを維持して上下余白を縮める", function () {
     var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
-    var scope = vm.createContext({Math: Math});
+    var scope = vm.createContext({Math: Math, currentFontSize: 14});
     var start = appSource.indexOf("    function getDailyLaneMetrics(");
     var end = appSource.indexOf("    function createDailyEventBar(");
     var metrics;
@@ -1183,7 +1184,7 @@ test("日々予定は文字の高さを維持して上下余白を縮める", fu
 
 test("日々予定の段数が増えてもグループ外側の余白を増やさない", function () {
     var appSource = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
-    var scope = vm.createContext({Math: Math});
+    var scope = vm.createContext({Math: Math, currentFontSize: 14});
     var start = appSource.indexOf("    function getDailyLaneMetrics(");
     var end = appSource.indexOf("    function createDailyEventBar(");
 
@@ -1410,6 +1411,91 @@ test("試験用CSVは平日に全グループを収録しGP1に複数日予定�
     assert.ok(rows.some(function (row) {
         return row.Title === "GP1 週またぎ対応" && row.EventDate === "2026-10-09 13:00" && row.EndDate === "2026-10-13 12:00";
     }));
+});
+
+test("文字設定を検証して適用し、旧Cookieの文字設定を使用しない", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var fields = {"setting-font-family": {}, "setting-font-size": {}};
+    var saved = {fontFamily: "mincho", fontSize: "20"};
+    var scope = vm.createContext({
+        document: {body: {style: {}}, documentElement: {style: {}}},
+        currentFontSize: 14,
+        byId: function (id) { return fields[id]; },
+        storeDisplayPreference: function () { throw new Error("文字設定をCookieへ保存しました"); },
+        readDisplayPreference: function (name) { return saved[name] || ""; },
+        state: {},
+        setDarkMode: function () {},
+        setDisplayZoom: function () {},
+        loadOrganizationCollapseState: function () {}
+    });
+    vm.runInContext(source.slice(source.indexOf("    function setFontPreferences("),
+        source.indexOf("    function removeClass(")), scope);
+    scope.setFontPreferences("mincho", "20", true);
+    assert.strictEqual(scope.currentFontSize, 20);
+    assert.strictEqual(scope.document.documentElement.style.fontSize, "20px");
+    assert.ok(scope.document.body.style.fontFamily.indexOf("MS Mincho") >= 0);
+    scope.setFontPreferences("default", 14, false);
+    scope.initializeDisplayPreferences();
+    assert.strictEqual(fields["setting-font-family"].value, "default");
+    assert.strictEqual(fields["setting-font-size"].value, "14");
+    scope.setFontPreferences("__proto__", "999", false);
+    assert.strictEqual(scope.currentFontSize, 14);
+    assert.strictEqual(fields["setting-font-family"].value, "default");
+});
+
+test("文字を大きくすると日々予定の行高も広がる", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({currentFontSize: 14});
+    vm.runInContext(source.slice(source.indexOf("    function getDailyLaneMetrics("),
+        source.indexOf("    function createDailyEventBar(")), scope);
+    var normal = scope.getDailyGroupLayout(3).timelineHeight;
+    scope.currentFontSize = 20;
+    assert.ok(scope.getDailyGroupLayout(3).timelineHeight > normal);
+    assert.ok(scope.getDailyLaneMetrics().laneHeight > scope.getDailyLaneMetrics().eventHeight);
+});
+
+test("共有文字設定をリストから取得しETag付きで保存する", function () {
+    var browser = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js", "js/display-settings-data-source.js"]);
+    var source = new browser.window.YoteihyouDisplaySettingsDataSource({siteUrl: "https://example.invalid/sites/test"});
+    var rows = [{ID: 8, FontFamily: "mincho", FontSize: 18, __metadata: {etag: '"3"'}}];
+    var loaded;
+    var error = "";
+    var writes = 0;
+    function failure(message) { error = message; }
+    source.client.getEntityType = function (success) { success("SP.Data.DisplaySettingsListItem"); };
+    source.client.getDigest = function (success) { success("digest"); };
+    source.client.request = function (method, url, headers, body, success) {
+        if (method === "GET") {
+            assert.ok(decodeURIComponent(url).indexOf("Title eq 'default'") >= 0);
+            success({responseText: JSON.stringify({d: {results: rows}})});
+        } else {
+            writes += 1;
+            assert.strictEqual(headers["IF-MATCH"], '"3"');
+            assert.strictEqual(headers["X-HTTP-Method"], "MERGE");
+            assert.strictEqual(JSON.parse(body).FontFamily, "meiryo");
+            assert.strictEqual(JSON.parse(body).FontSize, 20);
+            success({});
+        }
+    };
+    source.load(function (item) { loaded = item; }, failure);
+    assert.strictEqual(loaded.family, "mincho");
+    assert.strictEqual(loaded.size, 18);
+    source.save(loaded, "meiryo", "20", function () {}, failure);
+    assert.strictEqual(writes, 1);
+    source.save(loaded, "invalid", 999, function () {}, failure);
+    assert.ok(error);
+    assert.strictEqual(writes, 1);
+    loaded.etag = "";
+    source.save(loaded, "meiryo", 20, function () {}, failure);
+    assert.strictEqual(writes, 1);
+    rows = [];
+    error = "";
+    source.load(function () { throw new Error("未準備リストを読込成功扱いにしました"); }, failure);
+    assert.ok(error);
+    source.client.request = function (method, url, headers, body, success, fail) { fail("競合"); };
+    loaded.etag = '"3"';
+    source.save(loaded, "meiryo", 20, function () { throw new Error("競合を保存成功扱いにしました"); }, failure);
+    assert.strictEqual(error, "競合");
 });
 
 process.stdout.write(passed + " tests passed\n");

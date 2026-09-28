@@ -1,22 +1,24 @@
+html { font-size: 14px; }
+
 * {
     box-sizing: border-box;
 }
 
-html,
 body {
     margin: 0;
     padding: 0;
     background: #f3f5f7;
     color: #222;
     font-family: "Yu Gothic UI", "Meiryo", sans-serif;
-    font-size: 14px;
+    font-size: 1rem;
 }
 
 button,
 input,
-textarea {
+textarea,
+select {
     font-family: inherit;
-    font-size: 14px;
+    font-size: 1rem;
 }
 
 .app-shell {
@@ -44,7 +46,7 @@ body.editor-open .app-shell {
     display: inline-block;
     margin: 0 28px 0 0;
     color: #174f7c;
-    font-size: 26px;
+    font-size: 1.85714286rem;
     vertical-align: middle;
 }
 
@@ -130,7 +132,7 @@ body.editor-open .app-shell {
     min-width: 150px;
     margin-left: 18px;
     color: #174f7c;
-    font-size: 21px;
+    font-size: 1.5rem;
     font-weight: bold;
     text-align: center;
     vertical-align: middle;
@@ -262,7 +264,7 @@ body.editor-open .app-shell {
     padding: 5px 7px;
     border-left: 4px solid #176aa4;
     background: #eef6fb;
-    font-size: 14px;
+    font-size: 1rem;
 }
 
 .weekly-event:last-child {
@@ -279,7 +281,7 @@ body.editor-open .app-shell {
     border: 0;
     background: transparent;
     color: #174f7c;
-    font-size: 14px;
+    font-size: 1rem;
     font-weight: bold;
     text-align: left;
     cursor: pointer;
@@ -293,7 +295,7 @@ body.editor-open .app-shell {
 .event-meta {
     margin-left: 10px;
     color: #555;
-    font-size: 14px;
+    font-size: 1rem;
 }
 
 .empty-schedule {
@@ -334,13 +336,13 @@ body.dark-mode .print-preview-controls { background: #fff; color: #222; }
 .print-preview-options label { display: block; margin-bottom: 12px; font-weight: bold; }
 .print-preview-options select,
 .print-preview-options input { display: block; width: 100%; margin-top: 4px; padding: 5px; }
-.print-preview-hint { margin: 4px 0 12px; font-size: 12px; }
+.print-preview-hint { margin: 4px 0 12px; font-size: 0.85714286rem; }
 .print-preview-group-heading { margin: 20px 0 8px; }
 .print-preview-group-heading button { margin: 5px 3px 0 0; }
 .print-preview-groups { max-height: 32vh; overflow-y: auto; border: 1px solid #c5cdd5; padding: 6px; }
 .print-preview-groups label { display: block; padding: 3px; }
 .print-preview-groups input { margin-right: 6px; }
-.print-preview-status { min-height: 35px; font-size: 12px; }
+.print-preview-status { min-height: 35px; font-size: 0.85714286rem; }
 .print-preview-scroll { height: 100%; overflow: auto; padding: 20px; }
 .print-preview-page { position: relative; overflow: hidden; margin: 0 auto 20px; background: #fff; box-shadow: 0 2px 14px #89929a; }
 .print-preview-content { position: absolute; top: 0; left: 0; }
@@ -458,7 +460,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .edit-mode-status {
     color: #805333;
-    font-size: 12px;
+    font-size: 0.85714286rem;
     font-weight: bold;
 }
 
@@ -466,7 +468,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .access-counter {
     color: #667789;
-    font-size: 11px;
+    font-size: 0.78571429rem;
     white-space: nowrap;
 }
 
@@ -485,9 +487,9 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     z-index: 1;
     top: 8px;
     color: #333;
-    font-size: 12px;
+    font-size: 0.85714286rem;
     font-weight: bold;
-    line-height: 14px;
+    line-height: 1rem;
     white-space: nowrap;
     transform: translateX(-50%);
 }
@@ -622,10 +624,10 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .daily-event-times {
     position: relative;
     display: block;
-    height: 14px;
-    font-size: 12px;
+    height: 1rem;
+    font-size: 0.85714286rem;
     font-weight: bold;
-    line-height: 14px;
+    line-height: 1rem;
 }
 
 .daily-event-start,
@@ -697,9 +699,9 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     overflow: visible;
     box-sizing: border-box;
     color: #173e5d;
-    font-size: 12px;
+    font-size: 0.85714286rem;
     font-weight: bold;
-    line-height: 14px;
+    line-height: 1rem;
     text-align: center;
     text-overflow: clip;
     white-space: nowrap;
@@ -733,7 +735,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     width: 100%;
     margin: 0 0 4px;
     padding: 4px 5px;
-    font-size: 14px;
+    font-size: 1rem;
     overflow: visible;
     border: 1px solid #7fa7c5;
     background: #e8f3fb;
@@ -778,7 +780,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .organization-schedule td {
     height: 14px;
     padding: 0;
-    line-height: 14px;
+    line-height: 1rem;
     vertical-align: middle;
 }
 
@@ -825,10 +827,10 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     border: 1px solid #71869a;
     background: #fff;
     color: #174f7c;
-    font-family: "Yu Gothic UI", "Meiryo", sans-serif;
-    font-size: 14px;
+    font-family: inherit;
+    font-size: 1rem;
     font-weight: bold;
-    line-height: 14px;
+    line-height: 1rem;
     vertical-align: middle;
     cursor: pointer;
 }
@@ -878,7 +880,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .zoom-label {
     margin-right: 3px;
-    font-size: 12px;
+    font-size: 0.85714286rem;
 }
 
 .zoom-button {
@@ -933,7 +935,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     padding: 1px 2px;
     border: 0;
     border-radius: 0;
-    line-height: 14px;
+    line-height: 1rem;
     white-space: normal;
 }
 
@@ -954,9 +956,9 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .period-event-times {
     display: block;
     min-height: 12px;
-    font-size: 11px;
+    font-size: 0.78571429rem;
     font-weight: bold;
-    line-height: 12px;
+    line-height: 0.85714286rem;
 }
 
 .period-event .daily-event-line {
@@ -1012,7 +1014,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .period-event-caption {
     display: block;
-    font-size: 12px;
+    font-size: 0.85714286rem;
     font-weight: bold;
     line-height: 1.25;
 }
@@ -1061,7 +1063,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .editor-panel h2 {
     margin: 0 0 16px;
     color: #174f7c;
-    font-size: 20px;
+    font-size: 1.42857143rem;
 }
 
 .editor-header {
@@ -1143,7 +1145,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .required {
     color: #b32929;
-    font-size: 12px;
+    font-size: 0.85714286rem;
 }
 
 .editor-actions {
@@ -1186,7 +1188,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .text-color-preview {
     color: #173e5d;
-    font-size: 12px;
+    font-size: 0.85714286rem;
     font-weight: bold;
 }
 
@@ -1199,7 +1201,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     padding: 7px 9px;
     border: 1px solid #c5cdd5;
     background: #f8fafb;
-    font-size: 12px;
+    font-size: 0.85714286rem;
 }
 
 .event-audit-row {
@@ -1247,7 +1249,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     background: #e3eff9;
 }
 
-.history-entry span { font-size: 12px; }
+.history-entry span { font-size: 0.85714286rem; }
 .history-detail { margin-top: 12px; }
 .history-detail h3 { margin: 0 0 6px; }
 .history-detail p { line-height: 1.6; }
@@ -1256,7 +1258,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 12px;
+    font-size: 0.85714286rem;
 }
 
 .history-detail-table th,
@@ -1955,3 +1957,7 @@ body.dark-mode .settings-table td {
 
     .daily-event-line.line-dotted { background: transparent; }
 }
+
+.font-settings { margin: 12px 0; }
+.font-settings label { display: inline-block; margin: 0 16px 8px 0; }
+.font-settings select { margin-left: 6px; padding: 4px; }

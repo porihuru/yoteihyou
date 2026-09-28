@@ -31,6 +31,9 @@
             siteUrl: "",
             listTitle: "予定表",
             pageSize: 500,
+            displaySettings: {
+                listTitle: "予定表表示設定"
+            },
             history: {
                 listTitle: "予定表操作履歴"
             },
