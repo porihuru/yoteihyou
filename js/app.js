@@ -22,6 +22,18 @@
     var displaySettingsSource = new window.YoteihyouDisplaySettingsDataSource(config.sharePoint);
     var sharedFontSettings = null;
     var fontSettingsBusy = false;
+    var layoutEngine = window.YoteihyouScheduleLayout;
+    var layoutSource = new layoutEngine.Source(config.sharePoint);
+    var layoutRecord = null;
+    var layoutKey = "";
+    var layoutReady = false;
+    var layoutBusy = false;
+    var layoutEditingEnabled = false;
+    var layoutRequestId = 0;
+    var sampleLayouts = {};
+    var layoutDrag = null;
+    var layoutSuppressClickUntil = 0;
+    var selectedLayoutScope = "";
     var state = {
         viewMode: "monthly",
         displayDate: startOfDay(new Date()),
@@ -284,10 +296,13 @@
     }
 
     function toggleScheduleEdit() {
+        layoutEditingEnabled = false;
+        cancelLayoutDrag();
         service.setEditingEnabled(!service.isEditingEnabled());
         if (byId("event-editor").style.display !== "none") { closeEditor(); }
         if (settingsController && byId("settings-panel").style.display !== "none") { settingsController.close(); }
         updateSourceControls();
+        renderCurrentView();
         setMessage(service.isReadOnly() ? "予定表を読取専用にしました。" :
             "予定表を更新できる状態にしました。作業後は「更新終了」を押してください。", false);
     }
@@ -323,6 +338,283 @@
         startTime = startOfDay(item.startDate).getTime();
         endTime = startOfDay(item.endDate || item.startDate).getTime();
         return dayTime >= startTime && dayTime <= endTime;
+    }
+
+    function getLayoutScope(item, day, viewMode) {
+        var purpose = splitPurpose(item.purpose || "");
+        return JSON.stringify([viewMode === "monthly" ? "month" : util.formatDateKey(day), purpose.section, purpose.team]);
+    }
+
+    function getLayoutRows(item, day, viewMode) {
+        return layoutReady && layoutRecord ? layoutRecord.orders[getLayoutScope(item, day, viewMode)] : null;
+    }
+
+    function ensureLayout() {
+        var key = service.getMode() + ":" + state.viewMode + ":" + util.formatDateKey(getCurrentLoadRange().startDate);
+        var requestId;
+        if (key === layoutKey) { return; }
+        cancelLayoutDrag();
+        layoutKey = key;
+        layoutReady = false;
+        layoutRecord = null;
+        selectedLayoutScope = "";
+        requestId = ++layoutRequestId;
+        if (service.getMode() === "csv") {
+            layoutRecord = {key: key, orders: sampleLayouts[key] || {}};
+            layoutReady = true;
+            return;
+        }
+        layoutSource.load(key, function (record) {
+            if (requestId !== layoutRequestId) { return; }
+            layoutRecord = record;
+            layoutReady = true;
+            renderCurrentView();
+        }, function (message) {
+            if (requestId !== layoutRequestId) { return; }
+            setMessage("手動配置を読み込めないため自動配置で表示しています。並べ替えは利用できません。" + message, true);
+        });
+    }
+
+    function updateLayoutControls() {
+        var button = byId("toggle-layout-edit");
+        button.disabled = service.isReadOnly() || !layoutReady || layoutBusy;
+        button.setAttribute("aria-pressed", layoutEditingEnabled ? "true" : "false");
+        button.className = "button button-small screen-only" + (layoutEditingEnabled ? " button-primary" : "");
+        byId("reset-layout").disabled = !layoutEditingEnabled || service.isReadOnly() || !layoutReady || layoutBusy ||
+            !selectedLayoutScope || !layoutRecord.orders[selectedLayoutScope];
+    }
+
+    function toggleLayoutEdit() {
+        if (byId("toggle-layout-edit").disabled) { return; }
+        cancelLayoutDrag();
+        layoutEditingEnabled = !layoutEditingEnabled;
+        renderCurrentView();
+        setMessage(layoutEditingEnabled ? "上下入れ替え中です。予定の↕をドラッグしてください。" +
+            (service.getMode() === "csv" ? "試験用CSVでは画面内だけに保持します。" : "変更は移動のたびにSharePointへ保存します。") :
+            "上下入れ替えを終了しました。", false);
+    }
+
+    function saveLayout(orders) {
+        var record = layoutRecord, key = layoutKey, mode = service.getMode();
+        if (!layoutEditingEnabled || service.isReadOnly() || !layoutReady || layoutBusy) { return; }
+        cancelLayoutDrag();
+        if (mode === "csv") {
+            sampleLayouts[key] = orders;
+            layoutRecord.orders = orders;
+            renderCurrentView();
+            setMessage("配置を変更しました（試験用CSVでは画面内のみ）。", false);
+            return;
+        }
+        layoutBusy = true;
+        updateLayoutControls();
+        layoutSource.save(record, orders, function () {
+            layoutBusy = false;
+            if (layoutKey !== key) { updateLayoutControls(); return; }
+            // Read the new ETag before allowing another change.
+            layoutKey = "";
+            renderCurrentView();
+            setMessage("配置を保存しました。", false);
+        }, function (message) {
+            layoutBusy = false;
+            updateLayoutControls();
+            setMessage("配置は変更していません。再読込してからやり直してください。" + message, true);
+        });
+    }
+
+    function clearLayoutDropIndicator() {
+        var i, preview;
+        if (layoutDrag && layoutDrag.previews) {
+            for (i = 0; i < layoutDrag.previews.length; i += 1) {
+                preview = layoutDrag.previews[i];
+                if (preview.ghost.parentNode) { preview.ghost.parentNode.removeChild(preview.ghost); }
+                removeClass(preview.button, "layout-preview-origin");
+            }
+            layoutDrag.previews = [];
+        }
+        if (layoutDrag && layoutDrag.indicator) {
+            if (layoutDrag.indicator.parentNode) {
+                layoutDrag.indicator.parentNode.removeChild(layoutDrag.indicator);
+            }
+            removeClass(layoutDrag.indicatorHost, "layout-indicator-surface");
+            layoutDrag.indicator = null;
+        }
+    }
+
+    function getLayoutRowRect(button) {
+        var cell = findParentByClass(button, "organization-schedule-cell");
+        return (cell || button).getBoundingClientRect();
+    }
+
+    function showLayoutDropIndicator(clientX, rowRect, after) {
+        var host = byId(state.viewMode + "-view");
+        var hostRect = host.getBoundingClientRect();
+        var scale = host.offsetWidth ? hostRect.width / host.offsetWidth : 1;
+        var visibleLeft = hostRect.left + host.clientLeft * scale;
+        var visibleRight = visibleLeft + host.clientWidth * scale;
+        var width = Math.min(128, visibleRight - visibleLeft);
+        var left = Math.max(visibleLeft, Math.min(clientX - width / 2, visibleRight - width));
+        var indicator = document.createElement("span");
+        indicator.className = "layout-drop-indicator screen-only";
+        indicator.setAttribute("aria-hidden", "true");
+        // Use the pointer's horizontal position, not a distant event's position.
+        // Convert viewport coordinates to the scrolling, possibly zoomed view.
+        indicator.style.left = ((left - hostRect.left) / scale + host.scrollLeft - host.clientLeft) + "px";
+        indicator.style.top = (((after ? rowRect.bottom : rowRect.top) - hostRect.top) / scale +
+            host.scrollTop - host.clientTop) + "px";
+        indicator.style.width = (width / scale) + "px";
+        addClass(host, "layout-indicator-surface");
+        host.appendChild(indicator);
+        layoutDrag.indicator = indicator;
+        layoutDrag.indicatorHost = host;
+    }
+
+    function cancelLayoutDrag() {
+        clearLayoutDropIndicator();
+        layoutDrag = null;
+    }
+
+    function showLayoutPreview() {
+        var drag = layoutDrag, host = drag.indicatorHost, hostRect = host.getBoundingClientRect();
+        var scale = host.offsetWidth ? hostRect.width / host.offsetWidth : 1;
+        var rows = {}, lastRow = -1, i, button, id, row, rect, destination, targetRect, top, ghost, step;
+        drag.previews = [];
+        for (i = 0; i < drag.buttons.length; i += 1) {
+            button = drag.buttons[i];
+            if (button.getAttribute("data-layout-scope") !== drag.scope) { continue; }
+            row = Number(button.getAttribute("data-layout-row"));
+            rows[row] = getLayoutRowRect(button);
+            lastRow = Math.max(lastRow, row);
+        }
+        for (i = 0; i < drag.buttons.length; i += 1) {
+            button = drag.buttons[i];
+            if (button.getAttribute("data-layout-scope") !== drag.scope) { continue; }
+            id = button.getAttribute("data-layout-id");
+            destination = drag.proposed.positions[id];
+            if (destination === drag.positions[id]) { continue; }
+            rect = button.getBoundingClientRect();
+            targetRect = rows[destination];
+            step = rows[lastRow].height + (state.viewMode === "daily" ? 2 * scale : 0);
+            top = targetRect ? targetRect.top : rows[lastRow].top + (destination - lastRow) * step;
+            if (targetRect && state.viewMode !== "daily") { top += (targetRect.height - rect.height) / 2; }
+            ghost = document.createElement("div");
+            ghost.className = "layout-drop-preview screen-only";
+            ghost.setAttribute("aria-hidden", "true");
+            ghost.appendChild(document.createTextNode(button.textContent.replace(/↕/g, "")));
+            ghost.style.left = ((rect.left - hostRect.left) / scale + host.scrollLeft - host.clientLeft) + "px";
+            ghost.style.top = ((top - hostRect.top) / scale + host.scrollTop - host.clientTop) + "px";
+            ghost.style.width = (rect.width / scale) + "px";
+            ghost.style.height = (rect.height / scale) + "px";
+            host.appendChild(ghost);
+            addClass(button, "layout-preview-origin");
+            drag.previews.push({button: button, ghost: ghost});
+        }
+    }
+
+    function beginLayoutDrag(event, button, item) {
+        var buttons, entries = [], positions = {}, seen = {}, i, id;
+        if (event.button && event.button !== 1) { return; }
+        if (!layoutEditingEnabled || service.isReadOnly() || !layoutReady || layoutBusy) { return preventEvent(event); }
+        cancelLayoutDrag();
+        hideDailyContextMenu();
+        selectedLayoutScope = button.getAttribute("data-layout-scope");
+        selectDailyItem(item, button);
+        updateLayoutControls();
+        buttons = document.querySelectorAll("#" + state.viewMode + "-view [data-layout-id]");
+        for (i = 0; i < buttons.length; i += 1) {
+            if (buttons[i].getAttribute("data-layout-scope") !== selectedLayoutScope) { continue; }
+            id = buttons[i].getAttribute("data-layout-id");
+            if (seen[id]) { continue; }
+            seen[id] = true;
+            entries.push({id: id, start: Number(buttons[i].getAttribute("data-layout-start")),
+                end: Number(buttons[i].getAttribute("data-layout-end"))});
+            positions[id] = Number(buttons[i].getAttribute("data-layout-row"));
+        }
+        layoutDrag = {button: button, item: item, scope: selectedLayoutScope, key: layoutKey,
+            entries: entries, positions: positions, buttons: buttons,
+            startX: event.clientX, startY: event.clientY, moved: false, target: null};
+        return preventEvent(event);
+    }
+
+    function moveLayoutDrag(event) {
+        var target, hit, cell, meta, scope, candidates, i, candidateRect, drag = layoutDrag;
+        var rect, distance, nearestDistance = Infinity;
+        if (!drag) { return; }
+        if (!drag.moved && Math.abs(event.clientY - drag.startY) + Math.abs(event.clientX - drag.startX) < 4) { return; }
+        drag.moved = true;
+        clearLayoutDropIndicator();
+        drag.target = null;
+        drag.proposed = null;
+        hit = document.elementFromPoint(event.clientX, event.clientY);
+        target = hit;
+        while (target && target !== document.body && !target.getAttribute("data-layout-id")) { target = target.parentNode; }
+        // In the daily timeline, the desired row may be empty at this time of day.
+        // Resolve that row vertically while staying inside the same date/group cell.
+        if (!target || target === document.body) {
+            cell = findParentByClass(hit, "daily-timeline-cell") || findParentByClass(hit, "organization-schedule-cell");
+            meta = cell && (cell._dailyMeta || cell._periodMeta);
+            scope = meta && JSON.stringify([state.viewMode === "monthly" ? "month" : util.formatDateKey(meta.day), meta.section, meta.team]);
+            if (scope === drag.scope) {
+                candidates = document.querySelectorAll("#" + state.viewMode + "-view [data-layout-id]");
+                for (i = 0; i < candidates.length; i += 1) {
+                    if (candidates[i].getAttribute("data-layout-scope") !== drag.scope) { continue; }
+                    candidateRect = getLayoutRowRect(candidates[i]);
+                    distance = Math.max(candidateRect.top - event.clientY, event.clientY - candidateRect.bottom, 0);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        target = candidates[i];
+                    }
+                }
+            }
+        }
+        if (!target || target === document.body || target.getAttribute("data-layout-scope") !== drag.scope ||
+                target.getAttribute("data-layout-id") === String(drag.item.id)) { return; }
+        rect = getLayoutRowRect(target);
+        drag.after = event.clientY >= rect.top + rect.height / 2;
+        drag.target = target;
+        var sourceRow = drag.positions[String(drag.item.id)];
+        var targetRow = Number(target.getAttribute("data-layout-row"));
+        var destination = targetRow + (drag.after ? 1 : 0);
+        if (sourceRow < destination && sourceRow !== targetRow) { destination -= 1; }
+        drag.proposed = layoutEngine.move(drag.entries, drag.positions, String(drag.item.id), destination);
+        showLayoutDropIndicator(event.clientX, rect, drag.after);
+        showLayoutPreview();
+        preventEvent(event);
+    }
+
+    function finishLayoutDrag() {
+        var drag = layoutDrag, orders;
+        if (!drag) { return; }
+        if (drag.moved) {
+            dailyInteraction.suppressItemId = String(drag.item.id);
+            layoutSuppressClickUntil = new Date().getTime() + 250;
+        }
+        if (!layoutEditingEnabled || !drag.target || !drag.proposed || !drag.moved || drag.key !== layoutKey || service.isReadOnly()) { cancelLayoutDrag(); return; }
+        orders = JSON.parse(JSON.stringify(layoutRecord.orders));
+        orders[drag.scope] = drag.proposed;
+        saveLayout(orders);
+    }
+
+    function decorateLayoutButton(button, item, day, viewMode, row, span) {
+        var handle;
+        button.setAttribute("data-layout-id", String(item.id));
+        button.setAttribute("data-layout-scope", getLayoutScope(item, day, viewMode));
+        button.setAttribute("data-layout-row", String(row));
+        button.setAttribute("data-layout-start", String(span ? span.start : 0));
+        button.setAttribute("data-layout-end", String(span ? span.end : 1));
+        util.addEvent(button, "focus", function () {
+            selectedLayoutScope = button.getAttribute("data-layout-scope");
+            updateLayoutControls();
+        });
+        if (layoutEditingEnabled && !service.isReadOnly() && layoutReady) {
+            handle = document.createElement("span");
+            handle.className = "layout-reorder-handle screen-only";
+            handle.title = "上下へドラッグして表示位置を変更（日時は変わりません）";
+            handle.appendChild(document.createTextNode("↕"));
+            handle.onmousedown = function (event) { return beginLayoutDrag(event || window.event, button, item); };
+            handle.onclick = function (event) { return preventEvent(event || window.event); };
+            button.appendChild(handle);
+        }
+        return button;
     }
 
     function compareItems(a, b) {
@@ -1410,10 +1702,19 @@
                 result.push(dayItems[i]);
             }
         }
+        if (viewMode === "weekly" && result.length) {
+            var savedRows = getLayoutRows(result[0], day, viewMode);
+            if (savedRows) {
+                var packed = layoutEngine.pack(result.map(function (item) { return {id: item.id, start: 0, end: 1}; }), savedRows);
+                var aligned = [];
+                for (i = 0; i < result.length; i += 1) { aligned[packed.lanes[String(result[i].id)]] = result[i]; }
+                result = aligned;
+            }
+        }
         return result;
     }
 
-    function alignMonthlyItemsByLane(itemsByDate, dayWidth) {
+    function alignMonthlyItemsByLane(itemsByDate, dayWidth, savedRows) {
         var uniqueItems = [];
         var aligned = [];
         var lanes = [];
@@ -1427,6 +1728,7 @@
         var captionDays;
         var i;
         var j;
+        var entries = [], packed, entry, spans = {};
         for (j = 0; j < itemsByDate.length; j += 1) {
             aligned[j] = [];
             for (i = 0; i < itemsByDate[j].length; i += 1) {
@@ -1450,6 +1752,9 @@
             reservedFirstIndex = Math.max(0, Math.min(firstIndex, itemsByDate.length - captionDays));
             reservedLastIndex = Math.min(itemsByDate.length - 1,
                 Math.max(lastIndex, reservedFirstIndex + captionDays - 1));
+            entries.push({id: item.id, start: reservedFirstIndex, end: reservedLastIndex + 1,
+                first: firstIndex, last: lastIndex, item: item});
+            spans[String(item.id)] = {start: reservedFirstIndex, end: reservedLastIndex + 1};
             for (lane = 0; lane < lanes.length; lane += 1) {
                 occupied = false;
                 for (j = reservedFirstIndex; j <= reservedLastIndex; j += 1) {
@@ -1468,7 +1773,18 @@
                 }
             }
         }
-        return {itemsByDate: aligned, requiredRows: lanes.length};
+        if (savedRows) {
+            packed = layoutEngine.pack(entries, savedRows);
+            for (j = 0; j < itemsByDate.length; j += 1) { aligned[j] = []; }
+            for (i = 0; i < entries.length; i += 1) {
+                entry = entries[i];
+                for (j = entry.first; j <= entry.last; j += 1) {
+                    if (itemsByDate[j].indexOf(entry.item) >= 0) { aligned[j][packed.lanes[String(entry.id)]] = entry.item; }
+                }
+            }
+            return {itemsByDate: aligned, requiredRows: packed.count, spans: spans};
+        }
+        return {itemsByDate: aligned, requiredRows: lanes.length, spans: spans};
     }
 
     function createHeaderCell(text, className) {
@@ -1577,7 +1893,8 @@
                     }
                 }
                 if (viewMode === "monthly" && !collapsed) {
-                    monthlyLayout = alignMonthlyItemsByLane(itemsByDate, monthlyDayWidth);
+                    monthlyLayout = alignMonthlyItemsByLane(itemsByDate, monthlyDayWidth,
+                        layoutReady && layoutRecord ? layoutRecord.orders[JSON.stringify(["month", block.section, block.team])] : null);
                     itemsByDate = monthlyLayout.itemsByDate;
                     requiredRows = monthlyLayout.requiredRows;
                 }
@@ -1619,7 +1936,9 @@
                         item = itemsByDate[j][rowIndex] || null;
                         scheduleCell = document.createElement("td");
                         scheduleCell.className = "organization-schedule-cell" +
-                            (collapsed ? " organization-collapsed-cell" : " clickable-date");
+                            (collapsed ? " organization-collapsed-cell" : " clickable-date") +
+                            (viewMode === "weekly" || viewMode === "monthly" ?
+                                (date.getDay() === 6 ? " saturday" : date.getDay() === 0 ? " sunday" : "") : "");
                         scheduleCell.title = collapsed ? "" :
                             formatJapaneseDate(date, true) + "の" + block.label + "に予定を追加";
                         if (!collapsed) {
@@ -1628,8 +1947,9 @@
                             };
                         }
                         if (item) {
-                            scheduleCell.appendChild(createEventButton(item, date, viewMode,
-                                viewMode !== "monthly" || j === 0 || !itemOccursOn(item, dates[j - 1])));
+                            scheduleCell.appendChild(decorateLayoutButton(createEventButton(item, date, viewMode,
+                                viewMode !== "monthly" || j === 0 || !itemOccursOn(item, dates[j - 1])), item, date, viewMode, rowIndex,
+                                viewMode === "monthly" ? monthlyLayout.spans[String(item.id)] : null));
                         } else {
                             scheduleCell.appendChild(document.createTextNode("\u00a0"));
                         }
@@ -2161,6 +2481,15 @@
                         lane: laneIndex
                     });
                 }
+                if (blockItems.length && getLayoutRows(blockItems[0], day, "daily")) {
+                    var packedLayout = layoutEngine.pack(placedItems.map(function (placed) {
+                        return {id: placed.item.id, start: placed.displayRange.start, end: placed.displayRange.end};
+                    }), getLayoutRows(blockItems[0], day, "daily"));
+                    for (j = 0; j < placedItems.length; j += 1) {
+                        placedItems[j].lane = packedLayout.lanes[String(placedItems[j].item.id)];
+                    }
+                    laneEnds.length = packedLayout.count;
+                }
                 rowCount = getRenderedRowCount(block, laneEnds.length);
 
                 groupCell = document.createElement("th");
@@ -2193,7 +2522,7 @@
                 };
                 appendDailyGridLines(timeline, rangeStart, rangeEnd, slotMinutes);
                 for (j = 0; j < placedItems.length; j += 1) {
-                    timeline.appendChild(createDailyEventBar(
+                    timeline.appendChild(decorateLayoutButton(createDailyEventBar(
                         placedItems[j].item,
                         placedItems[j].range,
                         placedItems[j].displayRange,
@@ -2201,7 +2530,7 @@
                         rangeEnd,
                         placedItems[j].lane,
                         groupLayout.groupBorderMargin
-                    ));
+                    ), placedItems[j].item, day, "daily", placedItems[j].lane, placedItems[j].displayRange));
                 }
                 timelineCell.appendChild(timeline);
                 (function (cell, sectionName, teamName, targetDay) {
@@ -2761,6 +3090,11 @@
     }
 
     function reloadData(successMessage, isWarning) {
+        cancelLayoutDrag();
+        layoutKey = "";
+        layoutReady = false;
+        layoutRequestId += 1;
+        if (service.getMode() === "csv") { sampleLayouts = {}; }
         var mode = service.getMode();
         var requestId = loadRequestId + 1;
         var range = getCurrentLoadRange();
@@ -2789,6 +3123,8 @@
     }
 
     function switchMode(mode) {
+        layoutEditingEnabled = false;
+        sampleLayouts = {};
         closeEditor();
         closeHistory();
         service.setEditingEnabled(false);
@@ -3249,6 +3585,8 @@
     }
 
     function renderCurrentView() {
+        cancelLayoutDrag();
+        ensureLayout();
         updateViewControls();
         if (state.viewMode === "daily") {
             renderDaily();
@@ -3259,6 +3597,7 @@
         }
         refreshFixedTimeAxis();
         updateFixedHeader();
+        updateLayoutControls();
     }
 
     function setViewMode(mode) {
@@ -3331,6 +3670,23 @@
             reloadData("");
         });
         util.addEvent(byId("toggle-schedule-edit"), "click", toggleScheduleEdit);
+        util.addEvent(byId("toggle-layout-edit"), "click", toggleLayoutEdit);
+        util.addEvent(byId("reset-layout"), "click", function () {
+            var orders;
+            if (byId("reset-layout").disabled) { return; }
+            orders = JSON.parse(JSON.stringify(layoutRecord.orders));
+            delete orders[selectedLayoutScope];
+            saveLayout(orders);
+        });
+        util.addEvent(document, "mousemove", function (event) { moveLayoutDrag(event || window.event); });
+        util.addEvent(document, "mouseup", finishLayoutDrag);
+        document.addEventListener("click", function (event) {
+            if (new Date().getTime() < layoutSuppressClickUntil) {
+                layoutSuppressClickUntil = 0;
+                preventEvent(event);
+            }
+        }, true);
+        util.addEvent(window, "blur", cancelLayoutDrag);
         util.addEvent(byId("view-daily"), "click", function () {
             setViewMode("daily");
         });
@@ -3441,6 +3797,7 @@
                 return false;
             }
             if (event.keyCode === 27) {
+                cancelLayoutDrag();
                 if (byId("print-preview").style.display !== "none") {
                     closePrintPreview();
                     return;
@@ -3504,6 +3861,7 @@
     function initialize() {
         window.YoteihyouDateTimeEditor.initialize();
         var mode = getStoredMode() || config.defaultDataSource;
+        initializeSystemLog();
         byId("app-title").innerHTML = util.escapeHtml(config.appTitle);
         document.title = config.appTitle;
         initializeDisplayPreferences();
@@ -3515,8 +3873,8 @@
             byId("access-counter").innerHTML = "アクセス " + String(count);
             byId("access-counter").title = "全利用者の累計アクセス数";
         }, function (message) {
-            byId("access-counter").innerHTML = "アクセス 123";
-            byId("access-counter").title = "暫定表示（集計できません: " + message + "）";
+            byId("access-counter").textContent = accessCounter.api.siteUrl ? "アクセス 集計失敗" : "アクセス 未接続";
+            byId("access-counter").title = "集計できません: " + message + "（詳細はシステムログを確認してください）";
         });
         bindEvents();
         settingsController = new window.YoteihyouSettingsController({
@@ -3540,6 +3898,62 @@
         renderCurrentView();
         loadFontSettings();
         reloadData("");
+        checkSystemConnections();
+    }
+
+    function initializeSystemLog() {
+        var log = window.yoteihyouSystemLog;
+        function target(client) { return client.listTitle + (client.siteUrl ? " / " + client.siteUrl : ""); }
+        function watch(object, client, loadSuccess, loadFailure) {
+            var skip = client ? function () { return !client.siteUrl; } : null;
+            var label = client ? target(client) : "試験用CSV / " + config.csv.url;
+            log.observe(object, "load", label, loadSuccess, loadFailure, skip);
+            ["create", "update", "remove"].forEach(function (method) {
+                if (object[method]) { log.observe(object, method, label, 1, 2, skip); }
+            });
+        }
+        watch(service.sources.csv, null, 1, 2);
+        // A missing URL is an error when SharePoint itself is the selected source.
+        log.observe(service.sources.sharepoint, "load", target(service.sources.sharepoint), 1, 2);
+        ["create", "update", "remove"].forEach(function (method) {
+            log.observe(service.sources.sharepoint, method, target(service.sources.sharepoint), 1, 2);
+        });
+        watch(organizationSettingsSource, organizationSettingsSource.client, 0, 1);
+        watch(displaySettingsSource, displaySettingsSource.client, 0, 1);
+        watch(layoutSource, layoutSource.client, 1, 2);
+        watch(service.history, service.history.api, 0, 1);
+        ["record", "recordSettings"].forEach(function (method) {
+            log.observe(service.history, method, target(service.history.api), 3, 4,
+                function () { return !service.history.api.siteUrl; });
+        });
+        log.observe(layoutSource, "save", target(layoutSource.client), 2, 3);
+        log.observe(displaySettingsSource, "save", target(displaySettingsSource.client), 3, 4);
+        log.observe(accessCounter, "increment", target(accessCounter.api), 0, 1, function () { return !accessCounter.api.siteUrl; });
+        byId("recheck-connections").onclick = checkSystemConnections;
+    }
+
+    function checkSystemConnections() {
+        var log = window.yoteihyouSystemLog, schedule = service.sources.sharepoint;
+        var f = schedule.fields, org = organizationSettingsSource.fields;
+        var targets = [
+            {client: schedule, fields: [f.id, f.title, f.startDate, f.endDate, f.allDay, f.category, f.location, f.description, f.purpose]},
+            {client: organizationSettingsSource.client, disabled: !organizationSettingsSource.enabled,
+                fields: [org.id, org.groupName, org.teamName, org.monthlyRows, org.weeklyRows, org.dailyRows, org.autoRows, org.sortOrder, org.isActive]},
+            {client: displaySettingsSource.client, fields: ["ID", "Title", "FontFamily", "FontSize"]},
+            {client: layoutSource.client, fields: ["ID", "Title", "LayoutJson"]},
+            {client: service.history.api, fields: ["ID", "Title", "Action", "ScheduleItemId", "ScheduleList", "BeforeJson", "AfterJson"]},
+            {client: accessCounter.api, fields: ["ID", "Title", "VisitCount"]}
+        ];
+        var remaining = targets.length + (service.getMode() === "csv" ? 1 : 0);
+        byId("recheck-connections").disabled = true;
+        function completed() {
+            remaining -= 1;
+            if (!remaining) { byId("recheck-connections").disabled = false; }
+        }
+        targets.forEach(function (entry) {
+            log.probe(entry.client, entry.fields.filter(function (field) { return !!field; }), entry.disabled, completed);
+        });
+        if (service.getMode() === "csv") { log.probeCsv(config.csv.url, completed); }
     }
 
     util.addEvent(window, "load", initialize);

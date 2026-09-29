@@ -11,6 +11,7 @@
 <body>
     <div id="app" class="app-shell">
         <div class="app-header">
+            <button type="button" id="open-system-log" class="button button-small system-log-button screen-only">システムログ</button>
             <h1 id="app-title">予定表</h1>
             <div class="source-switch" role="group" aria-label="データ接続先">
                 <span class="source-label">データ接続：</span>
@@ -21,7 +22,8 @@
             <div id="connection-status" class="connection-status" aria-live="polite">読込準備中</div>
             <span id="edit-mode-status" class="edit-mode-status">読取専用</span>
             <button type="button" id="toggle-schedule-edit" class="button button-small" aria-pressed="false">予定表更新</button>
-            <span id="access-counter" class="access-counter" title="暫定表示。SharePointから取得後に更新します。" aria-live="polite">アクセス 123</span>
+            <button type="button" id="toggle-layout-edit" class="button button-small screen-only" aria-pressed="false" disabled title="オンにすると予定の↕で上下を入れ替えできます">上下入れ替え</button>
+            <span id="access-counter" class="access-counter" title="SharePointの共通アクセス数を確認しています。" aria-live="polite">アクセス 確認中</span>
         </div>
 
         <div id="message" class="message" aria-live="polite"></div>
@@ -51,6 +53,7 @@
             <button type="button" id="open-history" class="button toolbar-right">履歴</button>
             <button type="button" id="new-event" class="button button-primary toolbar-right">予定を追加</button>
             <button type="button" id="open-settings" class="button toolbar-right">設定</button>
+            <button type="button" id="reset-layout" class="button screen-only" disabled title="選択した予定と同じ日・グループ（月間は同じ月・グループ）の手動配置を解除">自動配置に戻す</button>
         </div>
 
         <div id="print-preview" class="print-preview" role="dialog" aria-modal="true" aria-labelledby="print-preview-title" style="display:none;">
@@ -222,6 +225,25 @@
             </form>
         </div>
 
+        <div id="system-log-panel" class="system-log-panel screen-only" role="dialog" aria-modal="true" aria-labelledby="system-log-title" style="display:none;">
+            <div class="system-log-dialog">
+                <div class="system-log-header">
+                    <h2 id="system-log-title">システムログ</h2>
+                    <button type="button" id="recheck-connections" class="button" disabled>接続を再確認</button>
+                    <button type="button" id="clear-system-log" class="button">ログを消去</button>
+                    <button type="button" id="close-system-log" class="button">閉じる</button>
+                </div>
+                <p id="system-log-status" role="status" aria-live="polite"></p>
+                <p>接続確認はリスト・列の読取を確認します。書込権限は実際の保存時の結果で確認します。エラー件数には過去の記録も含まれます。</p>
+                <div class="system-log-table-wrap">
+                    <table class="system-log-table">
+                        <thead><tr><th>日時</th><th>結果</th><th>接続先・対象</th><th>処理</th><th>内容</th></tr></thead>
+                        <tbody id="system-log-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <div id="history-panel" class="editor-panel history-panel" role="region" aria-labelledby="history-title" style="display:none;">
             <div class="editor-header">
                 <h2 id="history-title">操作履歴</h2>
@@ -330,6 +352,7 @@
         <button type="button" id="daily-menu-paste" role="menuitem">貼り付け（Ctrl+V）</button>
     </div>
 
+    <script src="js/system-log.js"></script>
     <script src="js/config.js"></script>
     <script src="config/organizations.js"></script>
     <script src="js/util.js"></script>
@@ -339,6 +362,7 @@
     <script src="js/access-counter.js"></script>
     <script src="js/sharepoint-settings-data-source.js"></script>
     <script src="js/display-settings-data-source.js"></script>
+    <script src="js/schedule-layout.js"></script>
     <script src="js/data-service.js"></script>
     <script src="js/settings-controller.js"></script>
     <script src="js/date-time-editor.js"></script>

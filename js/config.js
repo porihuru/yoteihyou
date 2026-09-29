@@ -34,6 +34,9 @@
             displaySettings: {
                 listTitle: "予定表表示設定"
             },
+            layoutSettings: {
+                listTitle: "予定表配置設定"
+            },
             history: {
                 listTitle: "予定表操作履歴"
             },

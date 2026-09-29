@@ -41,6 +41,24 @@ body.editor-open .app-shell {
     border: 1px solid #b8c5d1;
     background: #fff;
 }
+.app-header:after { content: ""; display: table; clear: both; }
+.system-log-button { float: right; margin: 2px 0 2px 12px; }
+.system-log-button.system-log-errors { color: #a21919; border-color: #bd3434; }
+.system-log-panel { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 3000; background: rgba(0, 0, 0, 0.35); }
+.system-log-dialog { width: 94%; max-width: 1200px; max-height: 90%; margin: 3vh auto; padding: 18px; overflow: auto; background: #fff; border: 1px solid #7895b2; }
+.system-log-header h2 { display: inline-block; margin: 0 24px 10px 0; }
+.system-log-table-wrap { overflow-x: auto; }
+.system-log-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.system-log-table th, .system-log-table td { border: 1px solid #b8c5d1; padding: 7px; text-align: left; vertical-align: top; word-wrap: break-word; }
+.system-log-table th:nth-child(1) { width: 17%; }
+.system-log-table th:nth-child(2) { width: 8%; }
+.system-log-table th:nth-child(3) { width: 24%; }
+.system-log-table th:nth-child(4) { width: 12%; }
+.system-log-table .system-log-error { background: #fff0f0; color: #901b1b; }
+.system-log-table .system-log-warning { background: #fff7e1; color: #704700; }
+body.dark-mode .system-log-dialog { background: #1c2a38; color: #e4eef7; }
+body.dark-mode .system-log-table .system-log-error { background: #46282b; color: #ffd9d9; }
+body.dark-mode .system-log-table .system-log-warning { background: #453c22; color: #fff0b9; }
 
 .app-header h1 {
     display: inline-block;
@@ -798,13 +816,22 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     text-align: left;
 }
 
-.weekly-schedule thead th.saturday {
+.weekly-schedule thead th.saturday,
+.monthly-schedule thead th.saturday {
     color: #1f5794;
+    background: #e3effb;
 }
 
-.weekly-schedule thead th.sunday {
+.weekly-schedule thead th.sunday,
+.monthly-schedule thead th.sunday {
     color: #b32929;
+    background: #fbe7e7;
 }
+
+/* Keep event text colors independent of the softly tinted weekend columns. */
+.organization-schedule td.organization-schedule-cell.saturday { background: #f0f6fd; }
+.organization-schedule td.organization-schedule-cell.sunday { background: #fff2f2; }
+.organization-schedule td.organization-schedule-cell.period-drop-target { background: #e3eff9; }
 
 .organization-schedule .organization-column,
 .organization-schedule .organization-name {
@@ -1567,13 +1594,21 @@ body.dark-mode .settings-table td {
     border-color: #485461;
 }
 
-body.dark-mode .weekly-schedule thead th.saturday {
+body.dark-mode .weekly-schedule thead th.saturday,
+body.dark-mode .monthly-schedule thead th.saturday {
     color: #8dbdff;
+    background: #263c55;
 }
 
-body.dark-mode .weekly-schedule thead th.sunday {
+body.dark-mode .weekly-schedule thead th.sunday,
+body.dark-mode .monthly-schedule thead th.sunday {
     color: #ff9696;
+    background: #4b3038;
 }
+
+body.dark-mode .organization-schedule td.organization-schedule-cell.saturday { background: #233142; }
+body.dark-mode .organization-schedule td.organization-schedule-cell.sunday { background: #392a32; }
+body.dark-mode .organization-schedule td.organization-schedule-cell.period-drop-target { background: #25445c; }
 
 body.dark-mode .calendar td,
 body.dark-mode .organization-schedule-cell,
@@ -1780,6 +1815,21 @@ body.dark-mode .settings-table td {
         color: #000;
     }
 
+    body .organization-schedule thead th.saturday {
+        color: #1f5794 !important;
+        background: #e3effb !important;
+    }
+    body .organization-schedule thead th.sunday {
+        color: #b32929 !important;
+        background: #fbe7e7 !important;
+    }
+    body .organization-schedule td.organization-schedule-cell.saturday {
+        background: #f0f6fd !important;
+    }
+    body .organization-schedule td.organization-schedule-cell.sunday {
+        background: #fff2f2 !important;
+    }
+
     body.dark-mode .organization-schedule th,
     body.dark-mode .organization-schedule td {
         border-color: #666 !important;
@@ -1961,3 +2011,60 @@ body.dark-mode .settings-table td {
 .font-settings { margin: 12px 0; }
 .font-settings label { display: inline-block; margin: 0 16px 8px 0; }
 .font-settings select { margin-left: 6px; padding: 4px; }
+.layout-reorder-handle {
+    position: absolute;
+    right: 1px;
+    top: 0;
+    z-index: 6;
+    width: 17px;
+    height: 17px;
+    line-height: 17px;
+    text-align: center;
+    border-radius: 3px;
+    color: #174878;
+    background: #e5effa;
+    border: 1px solid #7895b2;
+    cursor: ns-resize;
+    font-size: 14px;
+    user-select: none;
+    -ms-user-select: none;
+}
+.layout-indicator-surface { position: relative; }
+.layout-preview-origin { opacity: 0.25; }
+.layout-drop-preview {
+    position: absolute;
+    z-index: 19;
+    pointer-events: none;
+    border: 1px dashed #0969da;
+    background: rgba(225, 240, 255, 0.85);
+    color: #164878;
+    overflow: hidden;
+    font-size: 0.85714286rem;
+}
+.layout-drop-indicator {
+    position: absolute;
+    height: 3px;
+    margin-top: -1px;
+    background: #0969da;
+    box-shadow: 0 0 0 1px #fff;
+    z-index: 20;
+    pointer-events: none;
+}
+.layout-drop-indicator:before,
+.layout-drop-indicator:after {
+    content: "";
+    position: absolute;
+    top: -3px;
+    width: 3px;
+    height: 9px;
+    background: #0969da;
+}
+.layout-drop-indicator:before { left: 0; }
+.layout-drop-indicator:after { right: 0; }
+body.dark-mode .layout-reorder-handle { color: #fff; background: #294d70; }
+@media print {
+    .layout-reorder-handle { display: none !important; }
+    .layout-drop-indicator { display: none !important; }
+    .layout-drop-preview { display: none !important; }
+    .layout-preview-origin { opacity: 1; }
+}

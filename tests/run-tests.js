@@ -640,10 +640,14 @@ test("共通アクセスカウンターは競合時に再取得して加算す�
     var reads = 0;
     var writes = 0;
     var result = 0;
+    var readUrls = [];
     counter.api.getEntityType = function (success) { success("SP.Data.CounterListItem"); };
     counter.api.getDigest = function (success) { success("digest"); };
     counter.api.request = function (method, url, headers, body, success, failure) {
         if (method === "GET") {
+            assert.strictEqual(readUrls.indexOf(url), -1, "競合後はキャッシュ済みURLを再利用しない");
+            readUrls.push(url);
+            assert.strictEqual(headers["Cache-Control"], "no-cache");
             reads += 1;
             success({responseText: JSON.stringify({d: {results: [{
                 ID: 1, VisitCount: reads === 1 ? 10 : 11,
@@ -664,6 +668,53 @@ test("共通アクセスカウンターは競合時に再取得して加算す�
     assert.strictEqual(writes, 2);
 });
 
+test("アクセス数の更新権限エラーはHTTP状態と失敗箇所を保持する", function () {
+    var counter = new AccessCounter(options), received;
+    counter.api.getEntityType = function (success) { success("SP.Data.CounterListItem"); };
+    counter.api.getDigest = function (success) { success("digest"); };
+    counter.api.request = function (method, url, headers, body, success, failure) {
+        if (method === "GET") {
+            success({responseText: JSON.stringify({d: {results: [{ID: 1, VisitCount: 10, __metadata: {etag: '"1"'}}]}})});
+        } else { failure("アクセスが拒否されました", 403); }
+    };
+    counter.increment(function () { throw new Error("成功扱いになりました"); }, function (message, status) {
+        received = {message: message, status: status};
+    });
+    assert.strictEqual(received.status, 403);
+    assert.ok(received.message.indexOf("アクセス数の更新") >= 0);
+});
+
+test("カウンターの初期項目不足と不正値は明示し既存値を上書きしない", function () {
+    [[], [{ID: 1, VisitCount: "不正", __metadata: {etag: '"1"'}}],
+        [{ID: 1, VisitCount: null, __metadata: {etag: '"1"'}}]].forEach(function (rows) {
+        var counter = new AccessCounter(options), message = "";
+        counter.api.request = function (method, url, headers, body, success) {
+            assert.strictEqual(method, "GET");
+            success({responseText: JSON.stringify({d: {results: rows}})});
+        };
+        counter.increment(function () { throw new Error("成功扱いになりました"); }, function (error) { message = error; });
+        assert.ok(message.indexOf(rows.length ? "VisitCountが不正" : "初期項目がありません") >= 0);
+    });
+});
+
+test("アクセス数の競合は5回で終了し無条件上書きしない", function () {
+    var counter = new AccessCounter(options), writes = 0, status;
+    counter.api.getEntityType = function (success) { success("SP.Data.CounterListItem"); };
+    counter.api.getDigest = function (success) { success("digest"); };
+    counter.api.request = function (method, url, headers, body, success, failure) {
+        if (method === "GET") {
+            success({responseText: JSON.stringify({d: {results: [{ID: 1, VisitCount: 10, __metadata: {etag: '"1"'}}]}})});
+        } else {
+            assert.strictEqual(headers["IF-MATCH"], '"1"');
+            writes += 1;
+            failure("競合", 412);
+        }
+    };
+    counter.increment(function () { throw new Error("成功扱いになりました"); }, function (message, code) { status = code; });
+    assert.strictEqual(writes, 5);
+    assert.strictEqual(status, 412);
+});
+
 test("上部に更新切替と小さな共有カウンターを置き縦余白を半減する", function () {
     var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
     var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
@@ -671,7 +722,8 @@ test("上部に更新切替と小さな共有カウンターを置き縦余白�
     assert.ok(html.indexOf('id="edit-mode-status"') >= 0);
     assert.ok(html.indexOf('id="toggle-schedule-edit"') >= 0);
     assert.ok(html.indexOf('id="access-counter"') >= 0);
-    assert.ok(html.indexOf('>アクセス 123</span>') >= 0);
+    assert.ok(html.indexOf('>アクセス 確認中</span>') >= 0);
+    assert.ok(app.indexOf('"アクセス 集計失敗"') >= 0);
     assert.ok(/\.app-header\s*\{[^}]*padding:\s*7\.5px 18px;/.test(css));
     assert.ok(app.indexOf("accessCounter.increment(function (count)") >= 0);
     assert.ok(app.indexOf("service.setEditingEnabled(false);") >= 0);
@@ -953,10 +1005,10 @@ test("週間の土日見出しを色分けし予定のない土日だけ半幅�
     scope.updateWeeklyColumnWidths();
     assert.ok(Math.abs(columnWidth(columns[6]) - columnWidth(columns[1])) < 0.001);
     assert.ok(Math.abs(columnWidth(columns[7]) * 2 - columnWidth(columns[1])) < 0.001);
-    assert.ok(/\.weekly-schedule thead th\.saturday\s*\{[^}]*color:\s*#1f5794;/.test(css));
-    assert.ok(/\.weekly-schedule thead th\.sunday\s*\{[^}]*color:\s*#b32929;/.test(css));
-    assert.ok(/body\.dark-mode \.weekly-schedule thead th\.saturday\s*\{[^}]*color:\s*#8dbdff;/.test(css));
-    assert.ok(/body\.dark-mode \.weekly-schedule thead th\.sunday\s*\{[^}]*color:\s*#ff9696;/.test(css));
+    assert.ok(/\.weekly-schedule thead th\.saturday\s*,[^{}]+\{[^}]*color:\s*#1f5794;/.test(css));
+    assert.ok(/\.weekly-schedule thead th\.sunday\s*,[^{}]+\{[^}]*color:\s*#b32929;/.test(css));
+    assert.ok(/body\.dark-mode \.weekly-schedule thead th\.saturday\s*,[^{}]+\{[^}]*color:\s*#8dbdff;/.test(css));
+    assert.ok(/body\.dark-mode \.weekly-schedule thead th\.sunday\s*,[^{}]+\{[^}]*color:\s*#ff9696;/.test(css));
 });
 
 test("SharePoint読込を表示期間で絞り込む", function () {
@@ -1496,6 +1548,417 @@ test("共有文字設定をリストから取得しETag付きで保存する", f
     loaded.etag = '"3"';
     source.save(loaded, "meiryo", 20, function () { throw new Error("競合を保存成功扱いにしました"); }, failure);
     assert.strictEqual(error, "競合");
+});
+
+var layoutContext = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js", "js/schedule-layout.js"]);
+var layout = layoutContext.window.YoteihyouScheduleLayout;
+
+test("手動配置は時間順に戻らず、未指定予定を重ならない空きへ配置する", function () {
+    var result = layout.pack([{id: "a", start: 0, end: 4}, {id: "b", start: 2, end: 5},
+        {id: "c", start: 6, end: 8}, {id: "new", start: 1, end: 3}], [["b", "c"], ["a"]]);
+    assert.strictEqual(result.lanes.b, 0);
+    assert.strictEqual(result.lanes.c, 0);
+    assert.strictEqual(result.lanes.a, 1);
+    assert.strictEqual(result.lanes.new, 2);
+});
+
+test("時刻変更で同じ段が衝突したら後続の指定段も下げて重なりを防ぐ", function () {
+    var result = layout.pack([{id: "a", start: 0, end: 5}, {id: "b", start: 2, end: 4},
+        {id: "c", start: 8, end: 9}], [["a", "b"], ["c"]]);
+    assert.strictEqual(result.lanes.a, 0);
+    assert.strictEqual(result.lanes.b, 1);
+    assert.strictEqual(result.lanes.c, 2);
+    assert.strictEqual(result.count, 3);
+});
+
+test("削除済みIDと重複IDを無視し、空の指定段は詰める", function () {
+    var result = layout.pack([{id: "a", start: 1, end: 2}], [["deleted"], ["a", "a"], ["a"]]);
+    assert.strictEqual(result.count, 1);
+    assert.strictEqual(result.lanes.a, 0);
+});
+
+test("午前の上下交換で午後の予定の段を変えず、余分な段も増やさない", function () {
+    var entries = [{id: "a", start: 9, end: 10}, {id: "b", start: 9, end: 10},
+        {id: "x", start: 15, end: 16}, {id: "y", start: 15, end: 16}];
+    var original = {a: 0, b: 1, x: 0, y: 1};
+    var moved = layout.move(entries, original, "b", 0);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(moved.positions)), {a: 1, b: 0, x: 0, y: 1});
+    assert.strictEqual(layout.pack(entries, moved).count, 2);
+    assert.strictEqual(JSON.stringify(original), '{"a":0,"b":1,"x":0,"y":1}');
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(layout.pack(entries, moved).lanes)), JSON.parse(JSON.stringify(moved.positions)));
+});
+
+test("移動先が空いていればその段に同居し、ほかの段を詰め直さない", function () {
+    var entries = [{id: "a", start: 9, end: 10}, {id: "b", start: 15, end: 16}, {id: "c", start: 9, end: 10}];
+    var moved = layout.move(entries, {a: 0, b: 1, c: 2}, "b", 0);
+    assert.strictEqual(JSON.stringify(moved.positions), '{"a":0,"b":0,"c":2}');
+    assert.strictEqual(layout.pack(entries, moved).lanes.c, 2);
+});
+
+test("長い帯が元の段に戻らない場合も無関係な予定を動かさず空きへ置く", function () {
+    var entries = [{id: "short", start: 3, end: 4}, {id: "wide", start: 2, end: 7},
+        {id: "other", start: 5, end: 6}, {id: "far", start: 20, end: 21}];
+    var moved = layout.move(entries, {short: 1, wide: 0, other: 1, far: 0}, "short", 0);
+    assert.strictEqual(moved.positions.short, 0);
+    assert.strictEqual(moved.positions.wide, 2);
+    assert.strictEqual(moved.positions.other, 1);
+    assert.strictEqual(moved.positions.far, 0);
+    assert.strictEqual(layout.pack(entries, moved).count, 3);
+});
+
+test("v2は新規予定・日時変更・削除があっても関係のない指定段を維持する", function () {
+    var entries = [{id: "a", start: 0, end: 8}, {id: "b", start: 2, end: 4},
+        {id: "c", start: 9, end: 10}, {id: "new", start: 3, end: 5}];
+    var packed = layout.pack(entries, {version: 2, positions: {a: 0, b: 0, c: 2, deleted: 1}});
+    assert.strictEqual(packed.lanes.c, 2);
+    assert.notStrictEqual(packed.lanes.a, packed.lanes.b);
+    assert.notStrictEqual(packed.lanes.a, packed.lanes.new);
+    assert.notStrictEqual(packed.lanes.b, packed.lanes.new);
+    assert.strictEqual(packed.lanes.deleted, undefined);
+});
+
+test("月間の手動配置は複数日の帯を同じ段に保つ", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var a = {id: "a"}, b = {id: "b"};
+    var scope = vm.createContext({layoutEngine: layout, compareItems: function () { return 0; },
+        estimateDailyCaptionPixels: function () { return 30; }});
+    vm.runInContext(source.slice(source.indexOf("    function alignMonthlyItemsByLane("),
+        source.indexOf("    function ", source.indexOf("    function alignMonthlyItemsByLane(") + 10)), scope);
+    var result = scope.alignMonthlyItemsByLane([[a], [a, b], [a]], 100, {version: 2, positions: {b: 0, a: 1}});
+    assert.strictEqual(result.itemsByDate[0][1], a);
+    assert.strictEqual(result.itemsByDate[1][1], a);
+    assert.strictEqual(result.itemsByDate[2][1], a);
+    assert.strictEqual(result.itemsByDate[1][0], b);
+});
+
+test("配置設定はETagを読み戻し競合時は成功扱いにしない", function () {
+    var source = new layout.Source(options), loaded, request, error;
+    source.client.request = function (method, url, headers, body, success) {
+        success({responseText: JSON.stringify({d: {results: [{ID: 9, LayoutJson: '{"scope":[["a"]]}',
+            __metadata: {etag: '"4"'}}]}})});
+    };
+    source.load("sharepoint:daily:2026-09-29", function (record) { loaded = record; }, function (message) { throw new Error(message); });
+    assert.strictEqual(loaded.etag, '"4"');
+    source.client.getEntityType = function (done) { done("SP.Data.LayoutListItem"); };
+    source.client.getDigest = function (done) { done("digest"); };
+    source.client.request = function (method, url, headers, body, success, failure) {
+        request = {headers: headers, body: JSON.parse(body)};
+        failure("競合", 412);
+    };
+    source.save(loaded, {scope: [["b"], ["a"]]}, function () { throw new Error("競合を無視"); }, function (message) { error = message; });
+    assert.strictEqual(request.headers["IF-MATCH"], '"4"');
+    assert.strictEqual(request.headers["X-HTTP-Method"], "MERGE");
+    assert.strictEqual(request.body.LayoutJson, '{"scope":[["b"],["a"]]}');
+    assert.strictEqual(error, "競合");
+    assert.strictEqual(JSON.stringify(loaded.orders), '{"scope":[["a"]]}');
+});
+
+test("初回配置保存と解除は単一項目への書き込みで行う", function () {
+    var source = new layout.Source(options), request, saved = false;
+    source.client.getEntityType = function (done) { done("Layout"); };
+    source.client.getDigest = function (done) { done("digest"); };
+    source.client.request = function (method, url, headers, body, success) {
+        request = {url: url, headers: headers, body: JSON.parse(body)}; success();
+    };
+    source.save({key: "daily:2026-09-29", orders: {}}, {}, function () { saved = true; }, function (message) { throw new Error(message); });
+    assert.strictEqual(saved, true);
+    assert.ok(/\/items$/.test(request.url));
+    assert.strictEqual(request.headers["IF-MATCH"], undefined);
+    assert.strictEqual(request.body.LayoutJson, "{}");
+});
+
+test("破損した配置・重複項目・ETagなしの保存を拒否する", function () {
+    var source = new layout.Source(options), failures = 0;
+    function fail() { failures += 1; }
+    function unexpected() { throw new Error("不正データを受理"); }
+    ["not json", "[]", '{"scope":1}', '{"scope":[[{}]]}'].forEach(function (json) {
+        source.client.request = function (method, url, headers, body, success) {
+            success({responseText: JSON.stringify({d: {results: [{ID: 1, LayoutJson: json, __metadata: {etag: '"1"'}}]}})});
+        };
+        source.load("key", unexpected, fail);
+    });
+    source.client.request = function (method, url, headers, body, success) {
+        success({responseText: '{"d":{"results":[{},{}]}}'});
+    };
+    source.load("key", unexpected, fail);
+    source.save({id: 1, key: "key"}, {}, unexpected, fail);
+    assert.strictEqual(failures, 6);
+});
+
+test("表示・日付・グループの配置を分離し、無効なドロップと読取専用では保存しない", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var readonly = false, saved = 0;
+    var scope = vm.createContext({
+        util: util, layoutEngine: layout, layoutKey: "daily:2026-09-29", layoutRecord: {orders: {}},
+        layoutDrag: null, layoutEditingEnabled: true, layoutSuppressClickUntil: 0, dailyInteraction: {}, selectedLayoutScope: "",
+        splitPurpose: function (value) { return {section: value, team: ""}; },
+        removeClass: function () {}, service: {isReadOnly: function () { return readonly; }},
+        state: {viewMode: "daily"}, document: {querySelectorAll: function () { throw new Error("無効な操作でDOMを変更"); }}
+    });
+    vm.runInContext(source.slice(source.indexOf("    function getLayoutScope("), source.indexOf("    function compareItems(")), scope);
+    scope.saveLayout = function () { saved += 1; };
+    var day = new Date(2026, 8, 29), next = new Date(2026, 8, 30), item = {id: "1", purpose: "GP1"};
+    assert.notStrictEqual(scope.getLayoutScope(item, day, "daily"), scope.getLayoutScope(item, next, "daily"));
+    assert.notStrictEqual(scope.getLayoutScope(item, day, "daily"), scope.getLayoutScope({purpose: "GP2"}, day, "daily"));
+    assert.strictEqual(scope.getLayoutScope(item, day, "monthly"), scope.getLayoutScope(item, next, "monthly"));
+    scope.layoutDrag = {item: item, moved: true, target: null, key: scope.layoutKey};
+    scope.finishLayoutDrag();
+    assert.strictEqual(scope.layoutDrag, null);
+    readonly = true;
+    scope.layoutDrag = {item: item, moved: true, target: {}, key: scope.layoutKey};
+    scope.finishLayoutDrag();
+    assert.strictEqual(scope.layoutDrag, null);
+    assert.strictEqual(saved, 0);
+});
+
+test("別期間へ移動した後に届いた共有配置の応答を表示しない", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8"), callbacks = [], renders = 0;
+    var date = new Date(2026, 8, 29);
+    var scope = vm.createContext({util: util, layoutKey: "", layoutReady: false, layoutRecord: null,
+        selectedLayoutScope: "", layoutRequestId: 0, layoutDrag: null, state: {viewMode: "daily"},
+        service: {getMode: function () { return "sharepoint"; }},
+        getCurrentLoadRange: function () { return {startDate: date}; },
+        renderCurrentView: function () { renders += 1; },
+        layoutSource: {load: function (key, success) { callbacks.push(success); }}
+    });
+    vm.runInContext(source.slice(source.indexOf("    function getLayoutScope("), source.indexOf("    function compareItems(")), scope);
+    scope.ensureLayout();
+    date = new Date(2026, 8, 30);
+    scope.ensureLayout();
+    callbacks[0]({orders: {old: []}});
+    assert.strictEqual(scope.layoutRecord, null);
+    assert.strictEqual(renders, 0);
+    callbacks[1]({orders: {current: []}});
+    assert.strictEqual(scope.layoutReady, true);
+    assert.strictEqual(renders, 1);
+});
+
+test("挿入線は離れた予定の横位置によらずマウス付近に出し、拡大と横スクロールに追従する", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    ["daily", "weekly", "monthly"].forEach(function (mode) {
+        [0.7, 1, 1.5].forEach(function (scale) {
+            var host = {offsetWidth: 900, clientWidth: 896, clientLeft: 2, clientTop: 2,
+                scrollLeft: 420, scrollTop: 30, children: [],
+                getBoundingClientRect: function () { return {left: 20, top: 100, width: 900 * scale}; },
+                appendChild: function (child) { this.children.push(child); child.parentNode = this; },
+                removeChild: function (child) { this.children.splice(this.children.indexOf(child), 1); }};
+            var scope = vm.createContext({state: {viewMode: mode}, layoutDrag: {},
+                byId: function (id) { assert.strictEqual(id, mode + "-view"); return host; },
+                addClass: function () {}, removeClass: function () {},
+                document: {createElement: function () { return {style: {}, setAttribute: function () {}}; }}});
+            vm.runInContext(source.slice(source.indexOf("    function clearLayoutDropIndicator("),
+                source.indexOf("    function beginLayoutDrag(")), scope);
+            var row = {left: 1000, right: 1200, top: 210, bottom: 250};
+            scope.showLayoutDropIndicator(260, row, false);
+            var line = host.children[0];
+            var actualLeft = 20 + (parseFloat(line.style.left) - host.scrollLeft + host.clientLeft) * scale;
+            var actualTop = 100 + (parseFloat(line.style.top) - host.scrollTop + host.clientTop) * scale;
+            assert.ok(Math.abs(actualLeft + parseFloat(line.style.width) * scale / 2 - 260) < 0.01);
+            assert.ok(Math.abs(actualTop - row.top) < 0.01);
+            scope.clearLayoutDropIndicator();
+            assert.strictEqual(host.children.length, 0);
+            scope.showLayoutDropIndicator(260, row, true);
+            line = host.children[0];
+            actualTop = 100 + (parseFloat(line.style.top) - host.scrollTop + host.clientTop) * scale;
+            assert.ok(Math.abs(actualTop - row.bottom) < 0.01);
+            scope.cancelLayoutDrag();
+            assert.strictEqual(host.children.length, 0);
+            assert.strictEqual(scope.layoutDrag, null);
+        });
+    });
+});
+
+test("空白や段の隙間へのドラッグでも近い段を選び、表示した境界と保存先を一致させる", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var body = {}, day = new Date(2026, 8, 29), key = '["2026-09-29","GP1",""]';
+    var cell = {parentNode: body, getAttribute: function () { return null; },
+        _dailyMeta: {day: day, section: "GP1", team: ""}};
+    function button(id, top) {
+        return {getAttribute: function (name) { return name === "data-layout-id" ? id : name === "data-layout-row" ? (id === "target" ? "0" : "1") : key; },
+            getBoundingClientRect: function () { return {left: 900, right: 1000, top: top, bottom: top + 39, height: 39}; }};
+    }
+    var target = button("target", 200), moved = button("moved", 241), indicator, saved;
+    var scope = vm.createContext({util: util, layoutEngine: layout, state: {viewMode: "daily"},
+        layoutDrag: {item: {id: "moved"}, scope: key, startX: 300, startY: 255, moved: false,
+            entries: [{id: "target", start: 0, end: 1}, {id: "moved", start: 0, end: 1}], positions: {target: 0, moved: 1}},
+        findParentByClass: function (element, className) { return element === cell && className === "daily-timeline-cell" ? cell : null; },
+        document: {body: body, elementFromPoint: function () { return cell; }, querySelectorAll: function () { return [target, moved]; }},
+        preventEvent: function () {}});
+    vm.runInContext(source.slice(source.indexOf("    function clearLayoutDropIndicator("), source.indexOf("    function finishLayoutDrag(")), scope);
+    scope.showLayoutDropIndicator = function (x, row, after) { indicator = {x: x, y: after ? row.bottom : row.top}; };
+    scope.showLayoutPreview = function () {};
+    scope.moveLayoutDrag({clientX: 300, clientY: 239.5});
+    assert.strictEqual(scope.layoutDrag.target, target);
+    assert.strictEqual(scope.layoutDrag.after, true);
+    assert.deepStrictEqual(indicator, {x: 300, y: 239});
+    saved = scope.layoutDrag.proposed;
+    assert.strictEqual(JSON.stringify(saved.positions), '{"target":0,"moved":1}');
+});
+
+test("複数の予定と衝突しても直接衝突しない予定は固定し、再配置後に重なりを残さない", function () {
+    var entries = [{id: "move", start: 2, end: 8}, {id: "a", start: 1, end: 4},
+        {id: "b", start: 5, end: 9}, {id: "x", start: 0, end: 2}, {id: "y", start: 9, end: 10}];
+    var result = layout.move(entries, {move: 1, a: 0, b: 0, x: 1, y: 0}, "move", 0);
+    assert.strictEqual(result.positions.x, 1);
+    assert.strictEqual(result.positions.y, 0);
+    assert.strictEqual(result.positions.move, 0);
+    entries.forEach(function (a, i) {
+        entries.slice(i + 1).forEach(function (b) {
+            assert.ok(result.positions[a.id] !== result.positions[b.id] || a.end <= b.start || b.end <= a.start);
+        });
+    });
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(layout.pack(entries, result).lanes)), JSON.parse(JSON.stringify(result.positions)));
+});
+
+test("共有設定は旧形式を読み、新形式を保存・再読込でき、不正な段番号は拒否する", function () {
+    var source = new layout.Source(options), loaded, payload, failures = 0;
+    function failed(message) { throw new Error(message); }
+    source.client.request = function (method, url, headers, body, done) {
+        done({responseText: JSON.stringify({d: {results: [{ID: 1, LayoutJson: '{"scope":[["a","x"],["b"]]}', __metadata: {etag: '"1"'}}]}})});
+    };
+    source.load("key", function (record) { loaded = record; }, failed);
+    var entries = [{id: "a", start: 0, end: 1}, {id: "b", start: 0, end: 1}, {id: "x", start: 3, end: 4}];
+    var old = layout.pack(entries, loaded.orders.scope);
+    var updated = {scope: layout.move(entries, old.lanes, "b", 0)};
+    source.client.getEntityType = function (done) { done("Layout"); };
+    source.client.getDigest = function (done) { done("digest"); };
+    source.client.request = function (method, url, headers, body, done) { payload = JSON.parse(body); done(); };
+    source.save(loaded, updated, function () {}, failed);
+    assert.strictEqual(JSON.parse(payload.LayoutJson).scope.version, 2);
+    source.client.request = function (method, url, headers, body, done) {
+        done({responseText: JSON.stringify({d: {results: [{ID: 1, LayoutJson: payload.LayoutJson, __metadata: {etag: '"2"'}}]}})});
+    };
+    source.load("key", function (record) { loaded = record; }, failed);
+    assert.strictEqual(loaded.orders.scope.positions.x, 0);
+    assert.strictEqual(loaded.orders.scope.positions.a, 1);
+    assert.strictEqual(loaded.orders.scope.positions.b, 0);
+    [-1, 0.5, "1", Infinity].forEach(function (row) {
+        source.save(loaded, {scope: {version: 2, positions: {a: row}}}, function () { throw new Error("不正な段を保存"); }, function () { failures += 1; });
+    });
+    assert.strictEqual(failures, 4);
+});
+
+test("週間の指定段の途中が空でも、後の予定を上へ詰めない", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var a = {id: "a"}, b = {id: "b"};
+    var scope = vm.createContext({layoutEngine: layout,
+        getItemsForDay: function () { return [a, b]; },
+        splitPurpose: function () { return {section: "G", team: ""}; },
+        getLayoutRows: function () { return {version: 2, positions: {a: 0, b: 2}}; }});
+    vm.runInContext(source.slice(source.indexOf("    function getItemsForOrganizationDay("), source.indexOf("    function alignMonthlyItemsByLane(")), scope);
+    var result = scope.getItemsForOrganizationDay("G", "", new Date(), "weekly");
+    assert.strictEqual(result.length, 3);
+    assert.strictEqual(result[0], a);
+    assert.strictEqual(result[1], undefined);
+    assert.strictEqual(result[2], b);
+});
+
+test("上下入れ替えは更新モードで明示的にオンにし、更新終了と再開でオフを維持する", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var editable = false, cancelled = 0;
+    var buttons = {
+        "toggle-layout-edit": {disabled: true, setAttribute: function (name, value) { this[name] = value; }},
+        "reset-layout": {}, "event-editor": {style: {display: "none"}}
+    };
+    var orders = {group: {version: 2, positions: {a: 1}}};
+    var scope = vm.createContext({layoutEditingEnabled: false, layoutReady: true, layoutBusy: false,
+        selectedLayoutScope: "group", layoutRecord: {orders: orders}, settingsController: null,
+        byId: function (id) { return buttons[id]; },
+        cancelLayoutDrag: function () { cancelled += 1; }, setMessage: function () {}, updateSourceControls: function () {},
+        service: {isReadOnly: function () { return !editable; }, isEditingEnabled: function () { return editable; },
+            setEditingEnabled: function (value) { editable = value; }, getMode: function () { return "csv"; }}});
+    vm.runInContext(source.slice(source.indexOf("    function updateLayoutControls("), source.indexOf("    function saveLayout(")), scope);
+    vm.runInContext(source.slice(source.indexOf("    function toggleScheduleEdit("), source.indexOf("    function sameDate(")), scope);
+    scope.renderCurrentView = function () { scope.updateLayoutControls(); };
+    scope.updateLayoutControls();
+    assert.strictEqual(buttons["toggle-layout-edit"].disabled, true);
+    scope.toggleLayoutEdit();
+    assert.strictEqual(scope.layoutEditingEnabled, false);
+    scope.toggleScheduleEdit();
+    assert.strictEqual(buttons["toggle-layout-edit"].disabled, false);
+    assert.strictEqual(scope.layoutEditingEnabled, false);
+    assert.strictEqual(buttons["reset-layout"].disabled, true);
+    scope.toggleLayoutEdit();
+    assert.strictEqual(scope.layoutEditingEnabled, true);
+    assert.strictEqual(buttons["toggle-layout-edit"]["aria-pressed"], "true");
+    assert.strictEqual(buttons["reset-layout"].disabled, false);
+    scope.toggleScheduleEdit();
+    assert.strictEqual(scope.layoutEditingEnabled, false);
+    assert.strictEqual(buttons["toggle-layout-edit"].disabled, true);
+    scope.toggleScheduleEdit();
+    assert.strictEqual(scope.layoutEditingEnabled, false);
+    assert.strictEqual(scope.layoutRecord.orders, orders);
+    assert.ok(cancelled >= 3);
+});
+
+function makeLogFixture(storage) {
+    var ctx = loadBrowserScripts(["js/system-log.js"]), timers = [];
+    ctx.window.setTimeout = function (fn) { timers.push(fn); return timers.length; };
+    ctx.window.clearTimeout = function (id) { timers[id - 1] = null; };
+    return {log: new ctx.window.YoteihyouSystemLog({storage: storage}), timers: timers, window: ctx.window};
+}
+
+test("システムログは300件を保持して再読込し、保存制限でも記録を続ける", function () {
+    var value, storage = {getItem: function () { return value; }, setItem: function (key, data) { value = data; }};
+    var fixture = makeLogFixture(storage), i;
+    for (i = 0; i < 305; i += 1) { fixture.log.add("list", "読込", "success", String(i)); }
+    assert.strictEqual(fixture.log.entries.length, 300);
+    assert.strictEqual(fixture.log.entries[0].detail, "5");
+    fixture.log.begin("unfinished", "読込");
+    var reloaded = makeLogFixture(storage).log;
+    assert.strictEqual(reloaded.entries[299].status, "warning");
+    storage.setItem = function () { throw new Error("blocked"); };
+    reloaded.add("list", "読込", "error", "失敗");
+    assert.strictEqual(reloaded.persistent, false);
+    assert.strictEqual(reloaded.entries[299].detail, "失敗");
+});
+
+test("システムログの監視はコールバックと戻り値を維持し、処理結果を一度だけ記録する", function () {
+    var fixture = makeLogFixture(), received;
+    var source = {load: function (range, success) { assert.strictEqual(this, source); success([range]); return 7; }};
+    fixture.log.observe(source, "load", "予定表", 1, 2);
+    assert.strictEqual(source.load("range", function (items) { received = items; }), 7);
+    assert.deepStrictEqual(received, ["range"]);
+    assert.strictEqual(fixture.log.entries.length, 1);
+    assert.strictEqual(fixture.log.entries[0].status, "success");
+    var failureSource = {load: function (success, failure) { failure("権限不足", 403); }};
+    fixture.log.observe(failureSource, "load", "設定", 0, 1);
+    failureSource.load(null, function (message, status) { received = [message, status]; });
+    assert.deepStrictEqual(received, ["権限不足", 403]);
+    assert.strictEqual(fixture.log.entries[1].detail, "HTTP 403 / 権限不足");
+});
+
+test("接続確認はGETだけを使い、列不足・未設定・無効設定を区別する", function () {
+    var fixture = makeLogFixture(), done = 0, requests = [];
+    var client = {siteUrl: "/site", listTitle: "配置", getListPath: function () { return "list"; }, getApiUrl: function (path) { return path; },
+        request: function (method, url, headers, body, success) { requests.push([method, url, body]); success({responseText: '{"d":{"results":[]}}'}); }};
+    function complete() { done += 1; }
+    fixture.log.probe(client, ["ID", "LayoutJson"], false, complete);
+    assert.strictEqual(requests[0][0], "GET");
+    assert.strictEqual(requests[0][2], null);
+    assert.ok(requests[0][1].indexOf("LayoutJson") >= 0);
+    assert.strictEqual(fixture.log.entries[0].status, "success");
+    client.request = function (method, url, headers, body, success, failure) { failure("列がありません", 400); };
+    fixture.log.probe(client, ["LayoutJson"], false, complete);
+    fixture.log.probe(client, [], true, complete);
+    client.siteUrl = "";
+    fixture.log.probe(client, [], false, complete);
+    assert.strictEqual(done, 4);
+    assert.strictEqual(fixture.log.entries[1].status, "error");
+    assert.strictEqual(fixture.log.entries[2].status, "skip");
+    assert.strictEqual(fixture.log.entries[3].status, "skip");
+});
+
+test("接続確認のタイムアウトで再確認が可能になり、遅延応答で二重完了しない", function () {
+    var fixture = makeLogFixture(), callback, completed = 0;
+    var client = {siteUrl: "/site", listTitle: "設定", getListPath: function () { return "list"; }, getApiUrl: function (path) { return path; },
+        request: function (method, url, headers, body, success) { callback = success; }};
+    fixture.log.probe(client, ["ID"], false, function () { completed += 1; });
+    fixture.timers.slice().forEach(function (timer) { if (timer) { timer(); } });
+    assert.strictEqual(completed, 1);
+    assert.strictEqual(fixture.log.entries[0].status, "warning");
+    callback({responseText: '{"d":{"results":[]}}'});
+    assert.strictEqual(completed, 1);
 });
 
 process.stdout.write(passed + " tests passed\n");
