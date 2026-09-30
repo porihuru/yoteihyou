@@ -2030,6 +2030,11 @@ body.dark-mode .settings-table td {
     -ms-user-select: none;
 }
 .layout-indicator-surface { position: relative; }
+.organization-schedule .event-item.layout-editing-event,
+.layout-editing-event .daily-event-caption,
+.layout-editing-event .period-event-caption { cursor: ns-resize; }
+.layout-editing-event .daily-resize-handle,
+.layout-editing-event .period-resize-handle { display: none; }
 .layout-preview-origin { opacity: 0.25; }
 .layout-drop-preview {
     position: absolute;

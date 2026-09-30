@@ -389,7 +389,7 @@
         cancelLayoutDrag();
         layoutEditingEnabled = !layoutEditingEnabled;
         renderCurrentView();
-        setMessage(layoutEditingEnabled ? "上下入れ替え中です。予定の↕をドラッグしてください。" +
+        setMessage(layoutEditingEnabled ? "上下入れ替え中です。予定を上下にドラッグしてください。青い線が移動先です。" +
             (service.getMode() === "csv" ? "試験用CSVでは画面内だけに保持します。" : "変更は移動のたびにSharePointへ保存します。") :
             "上下入れ替えを終了しました。", false);
     }
@@ -606,6 +606,14 @@
             updateLayoutControls();
         });
         if (layoutEditingEnabled && !service.isReadOnly() && layoutReady) {
+            addClass(button, "layout-editing-event");
+            // In layout mode the whole event must reorder, including its caption and ends.
+            button.onmousedown = function (event) { return beginLayoutDrag(event || window.event, button, item); };
+            button.onclick = function (event) {
+                selectDailyItem(item, button);
+                return preventEvent(event || window.event);
+            };
+            button.ondragstart = function (event) { return preventEvent(event || window.event); };
             handle = document.createElement("span");
             handle.className = "layout-reorder-handle screen-only";
             handle.title = "上下へドラッグして表示位置を変更（日時は変わりません）";

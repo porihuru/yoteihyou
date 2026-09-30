@@ -1891,6 +1891,42 @@ test("上下入れ替えは更新モードで明示的にオンにし、更新�
     assert.ok(cancelled >= 3);
 });
 
+test("上下入れ替え中は予定本体・文字・端をドラッグしても日時移動や編集を起動しない", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var moves = 0, edits = 0, reordered = 0;
+    function element() { return {className: "event-item", children: [], setAttribute: function () {},
+        appendChild: function (child) { this.children.push(child); }}; }
+    var scope = vm.createContext({layoutEditingEnabled: true, layoutReady: true,
+        service: {isReadOnly: function () { return false; }},
+        util: {addEvent: function () {}}, getLayoutScope: function () { return "scope"; },
+        addClass: function (node, name) { node.className += " " + name; },
+        document: {createElement: element, createTextNode: function (text) { return text; }},
+        beginLayoutDrag: function (event, button, item) { reordered += 1; assert.strictEqual(item.id, "a"); },
+        selectDailyItem: function () {}, preventEvent: function () { return false; }});
+    vm.runInContext(source.slice(source.indexOf("    function decorateLayoutButton("), source.indexOf("    function compareItems(")), scope);
+    ["daily", "weekly", "monthly"].forEach(function (view) {
+        var button = element();
+        button.onmousedown = function () { moves += 1; };
+        button.onclick = function () { edits += 1; };
+        scope.decorateLayoutButton(button, {id: "a"}, new Date(), view, 0);
+        [button, {className: "period-event-caption"}, {className: "daily-resize-start"}].forEach(function (target) {
+            button.onmousedown({target: target});
+            button.onclick({target: target});
+        });
+        assert.ok(button.className.indexOf("layout-editing-event") >= 0);
+        assert.strictEqual(button.ondragstart({}), false);
+    });
+    assert.strictEqual(reordered, 9);
+    assert.strictEqual(moves, 0);
+    assert.strictEqual(edits, 0);
+    scope.layoutEditingEnabled = false;
+    var normal = element();
+    normal.onmousedown = function () { moves += 1; };
+    scope.decorateLayoutButton(normal, {id: "a"}, new Date(), "weekly", 0);
+    normal.onmousedown({});
+    assert.strictEqual(moves, 1);
+});
+
 function makeLogFixture(storage) {
     var ctx = loadBrowserScripts(["js/system-log.js"]), timers = [];
     ctx.window.setTimeout = function (fn) { timers.push(fn); return timers.length; };
