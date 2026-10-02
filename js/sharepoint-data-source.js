@@ -3,6 +3,17 @@
 
     var util = window.YoteihyouUtil;
 
+    // Classic calendar all-day values carry calendar dates, not local instants.
+    // Keep this separate from timed events and the legacy custom AllDay column.
+    function allDayDate(value, isEnd) {
+        var match = /^(\d{4}-\d{2}-\d{2})(?:T|$)/.exec(String(value || ""));
+        return match ? util.parseDate(match[1] + (isEnd ? " 23:59" : " 00:00")) : null;
+    }
+
+    function allDayIso(date, isEnd) {
+        return util.formatDateKey(date) + (isEnd ? "T23:59:00Z" : "T00:00:00Z");
+    }
+
     function trimTrailingSlash(value) {
         return String(value || "").replace(/\/$/, "");
     }
@@ -90,6 +101,12 @@
         var f = this.fields;
         var startDate = row[f.startDate] ? new Date(row[f.startDate]) : null;
         var endDate = row[f.endDate] ? new Date(row[f.endDate]) : null;
+        var allDay = f.allDay ? row[f.allDay] === true || row[f.allDay] === 1 : false;
+        if (allDay && f.allDay === "fAllDayEvent") {
+            startDate = allDayDate(row[f.startDate], false);
+            endDate = allDayDate(row[f.endDate] || row[f.startDate], true);
+            if (!startDate || !endDate) { throw new Error("終日予定の日付を読み取れません。"); }
+        }
         var created = row[f.created || "Created"] ? new Date(row[f.created || "Created"]) : null;
         var modified = row[f.modified || "Modified"] ? new Date(row[f.modified || "Modified"]) : null;
         var author = row[f.author || "Author"];
@@ -100,7 +117,7 @@
             title: row[f.title] || "",
             startDate: startDate,
             endDate: endDate || startDate,
-            allDay: f.allDay ? row[f.allDay] === true || row[f.allDay] === 1 : false,
+            allDay: allDay,
             recurring: f.recurrence ? !!row[f.recurrence] || Number(row[f.eventType] || 0) !== 0 : false,
             category: row[f.category] || "",
             location: row[f.location] || "",
@@ -160,6 +177,12 @@
             if (range && range.startDate && range.endDate) {
                 filter = f.startDate + " lt datetime'" + util.toIsoString(range.endDate) + "' and " +
                     f.endDate + " ge datetime'" + util.toIsoString(range.startDate) + "'";
+                if (f.allDay === "fAllDayEvent") {
+                    filter = "((" + f.allDay + " eq false) and (" + filter + ")) or ((" +
+                        f.allDay + " eq true) and (" + f.startDate + " lt datetime'" +
+                        allDayIso(range.endDate, false) + "' and " + f.endDate + " ge datetime'" +
+                        allDayIso(range.startDate, false) + "'))";
+                }
             }
             url = buildUrl();
         } catch (error) {
@@ -249,6 +272,10 @@
         payload[f.title] = item.title;
         payload[f.startDate] = util.toIsoString(item.startDate);
         payload[f.endDate] = util.toIsoString(item.endDate || item.startDate);
+        if (item.allDay && f.allDay === "fAllDayEvent") {
+            payload[f.startDate] = allDayIso(item.startDate, false);
+            payload[f.endDate] = allDayIso(item.endDate || item.startDate, true);
+        }
         payload[f.category] = item.category || "";
         payload[f.location] = item.location || "";
         payload[f.description] = item.description || "";

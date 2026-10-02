@@ -50,6 +50,8 @@
     function sync() {
         var disabled = el("all-day").checked || el("all-day").disabled;
         ["start", "end"].forEach(function (prefix) {
+            el(prefix + "-time-label").style.display = el("all-day").checked ? "none" : "";
+            el(prefix + "-time-picker").style.display = el("all-day").checked ? "none" : "";
             el(prefix + "-time").disabled = disabled;
             el(prefix + "-time-toggle").disabled = disabled;
             showTimes(prefix, false);
