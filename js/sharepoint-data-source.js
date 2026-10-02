@@ -11,7 +11,10 @@
     }
 
     function allDayIso(date, isEnd) {
-        return util.formatDateKey(date) + (isEnd ? "T23:59:00Z" : "T00:00:00Z");
+        // REST writes are instants; SharePoint normalizes them to the site's day.
+        // Reads of standard all-day fields instead return floating calendar dates.
+        return util.toIsoString(new Date(date.getFullYear(), date.getMonth(), date.getDate(),
+            isEnd ? 23 : 0, isEnd ? 59 : 0, 0, 0));
     }
 
     function trimTrailingSlash(value) {
@@ -304,6 +307,30 @@
 
     SharePointDataSource.prototype.write = function (item, isUpdate, success, failure) {
         var self = this;
+        function completed() {
+            if (!item.allDay || self.fields.allDay !== "fAllDayEvent") { success(item); return; }
+            // Confirm the server's persisted calendar dates, without retrying a successful write.
+            self.request("GET", self.getApiUrl(self.getListPath() + "/items(" + encodeURIComponent(item.id) +
+                ")?$select=" + encodeURIComponent(self.fields.startDate + "," + self.fields.endDate + "," + self.fields.allDay)),
+                {}, null, function (xhr) {
+                    var row, actualStart, actualEnd;
+                    try {
+                        row = util.getJson(xhr).d;
+                        actualStart = allDayDate(row[self.fields.startDate], false);
+                        actualEnd = allDayDate(row[self.fields.endDate], true);
+                        if (!actualStart || !actualEnd) { throw new Error("保存後の日付を読み取れません。"); }
+                        if (util.formatDateKey(actualStart) !== util.formatDateKey(item.startDate) ||
+                                util.formatDateKey(actualEnd) !== util.formatDateKey(item.endDate || item.startDate)) {
+                            success(item, null, "予定は保存されましたが、SharePoint上の日付が入力と一致しません。入力：" +
+                                util.formatDateKey(item.startDate) + "～" + util.formatDateKey(item.endDate || item.startDate) +
+                                "、保存後：" + util.formatDateKey(actualStart) + "～" + util.formatDateKey(actualEnd) +
+                                "。サイトとPCのタイムゾーンを確認してください。");
+                            return;
+                        }
+                    } catch (error) { success(item, null, "予定は保存されましたが、保存後の日付確認に失敗しました。" + error.message); return; }
+                    success(item);
+                }, function (message) { success(item, null, "予定は保存されましたが、保存後の日付確認に失敗しました。" + message); });
+        }
         if (isUpdate && !item.etag) {
             failure("予定の更新情報を確認できません。再読込してから、もう一度操作してください。");
             return;
@@ -336,13 +363,13 @@
                 self.request("POST", url, headers, JSON.stringify(self.toPayload(item, entityType)), function (xhr) {
                     var data;
                     if (isUpdate || !xhr.responseText) {
-                        success(item);
+                        completed();
                         return;
                     }
                     data = util.getJson(xhr);
                     item.id = data.d[self.fields.id];
                     item.etag = data.d.__metadata && data.d.__metadata.etag ? data.d.__metadata.etag : "";
-                    success(item);
+                    completed();
                 }, failure);
             }, failure);
         }, failure);

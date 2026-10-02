@@ -1181,8 +1181,8 @@
         var daySpan;
         changed.purpose = joinPurpose(target.section, target.team, purpose.targets);
         if (changed.allDay) {
-            daySpan = Math.max(0, Math.round((startOfDay(changed.endDate).getTime() -
-                startOfDay(changed.startDate).getTime()) / 86400000));
+            daySpan = Math.max(0, Math.round((Date.UTC(changed.endDate.getFullYear(), changed.endDate.getMonth(), changed.endDate.getDate()) -
+                Date.UTC(changed.startDate.getFullYear(), changed.startDate.getMonth(), changed.startDate.getDate())) / 86400000));
             changed.startDate = new Date(target.day.getFullYear(), target.day.getMonth(), target.day.getDate());
             changed.endDate = new Date(target.day.getFullYear(), target.day.getMonth(), target.day.getDate() + daySpan, 23, 59);
         } else {

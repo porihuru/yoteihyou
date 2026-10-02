@@ -14,6 +14,15 @@ vm.createContext(ctx);
     vm.runInContext(fs.readFileSync(path.join(root, "js", f + ".js"), "utf8"), ctx);
 });
 var w = ctx.window, util = w.YoteihyouUtil, editor = w.YoteihyouDateTimeEditor;
+// Simulate the site's local-date normalization on REST writes (not a payload echo).
+function storedRow(payload) {
+    var row = JSON.parse(JSON.stringify(payload));
+    if (row.fAllDayEvent) {
+        row.EventDate = util.formatDateKey(new Date(payload.EventDate)) + "T00:00:00Z";
+        row.EndDate = util.formatDateKey(new Date(payload.EndDate)) + "T23:59:00Z";
+    }
+    return row;
+}
 function source(flag) { return new w.YoteihyouSharePointDataSource({siteUrl: "https://test.invalid", listTitle: "calendar", fields: {
     id: "ID", title: "Title", startDate: "EventDate", endDate: "EndDate", allDay: flag || "fAllDayEvent",
     category: "Category", location: "Location", description: "Description"
@@ -39,7 +48,7 @@ test("1日・複数日・月年またぎ・閏日を繰り返し保存しても�
                 assert.strictEqual(util.formatDateKey(item.endDate), dates[1]);
                 editor.set("start", item.startDate); editor.set("end", item.endDate);
                 item.startDate = editor.read("start", true); item.endDate = editor.read("end", true);
-                row = s.toPayload(item, "Event");
+                row = storedRow(s.toPayload(item, "Event"));
                 assert.strictEqual(row.EventDate, dates[0] + "T00:00:00Z");
                 assert.strictEqual(row.EndDate, dates[1] + "T23:59:00Z");
             }
@@ -102,7 +111,7 @@ test("終日へ変更して保存・再取得した予定が月間の対象日�
     var item = s.toItem({ID: 7, EventDate: "2026-11-15T00:00:00Z", EndDate: "2026-11-15T01:00:00Z", fAllDayEvent: false});
     editor.set("start", item.startDate); editor.set("end", item.endDate);
     item.allDay = true; item.startDate = editor.read("start", true); item.endDate = editor.read("end", true);
-    saved = s.toPayload(item, "Event"); saved.ID = 7;
+    saved = storedRow(s.toPayload(item, "Event")); saved.ID = 7;
     s.request = function (m, u, h, b, done) { done({responseText: JSON.stringify({d: {results: [saved]}})}); };
     s.load({startDate: new Date(2026, 10, 1), endDate: new Date(2026, 11, 1)}, function (items) { result = items; }, assert.fail);
     assert.strictEqual(result.length, 1);
@@ -115,5 +124,50 @@ test("終日へ変更して保存・再取得した予定が月間の対象日�
 test("既に保存された複数日を推測で短縮しない", function () {
     var item = source().toItem({EventDate: "2026-11-15T00:00:00Z", EndDate: "2026-11-16T23:59:00Z", fAllDayEvent: true});
     assert.strictEqual(util.formatDateKey(item.endDate), "2026-11-16");
+});
+test("日本時間の1日終日を前日15時から当日14時59分のUTCで送信", function () {
+    process.env.TZ = "Asia/Tokyo";
+    var p = source().toPayload({startDate: new Date(2026, 10, 15), endDate: new Date(2026, 10, 15, 23, 59), allDay: true}, "Event");
+    assert.strictEqual(p.EventDate, "2026-11-14T15:00:00Z");
+    assert.strictEqual(p.EndDate, "2026-11-15T14:59:00Z");
+});
+test("終日をドラッグして保存先で変換・再取得しても1日と複数日の日数を維持", function () {
+    var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({Date: Date, Math: Math, DAILY_SNAP_MINUTES: 15,
+        cloneScheduleItem: function (x) { var y = {}; Object.keys(x).forEach(function (k) { y[k] = x[k]; }); return y; },
+        splitPurpose: function () { return {targets: ["monthly"]}; }, joinPurpose: function () { return "GP1｜月間"; }});
+    vm.runInContext(app.slice(app.indexOf("    function moveItemToTarget("), app.indexOf("    function pasteDailyItem(")), scope);
+    ["Asia/Tokyo", "America/Los_Angeles"].forEach(function (tz) {
+        process.env.TZ = tz;
+        [0, 2].forEach(function (span) {
+            var s = source(), item = {startDate: new Date(2026, 2, 7), endDate: new Date(2026, 2, 7 + span, 23, 59), allDay: true};
+            [new Date(2026, 2, 8), new Date(2026, 11, 31), new Date(2027, 0, 4)].forEach(function (target) {
+                item = scope.moveItemToTarget(item, {day: target, section: "GP1", team: "", minute: 540});
+                item = s.toItem(storedRow(s.toPayload(item, "Event")));
+                assert.strictEqual(util.formatDateKey(item.startDate), util.formatDateKey(target));
+                assert.strictEqual(util.formatDateKey(item.endDate), util.formatDateKey(new Date(target.getFullYear(), target.getMonth(), target.getDate() + span)));
+            });
+        });
+    });
+    process.env.TZ = "Asia/Tokyo";
+});
+test("保存後の日付を実際にGETし不一致と読込失敗を警告、再POSTしない", function () {
+    ["match", "mismatch", "error"].forEach(function (mode) {
+        var s = source(), posts = 0, gets = 0, warning;
+        var item = {id: 1, etag: '"1"', title: "試験", allDay: true,
+            startDate: new Date(2026, 10, 15), endDate: new Date(2026, 10, 15, 23, 59)};
+        s.getEntityType = function (done) { done("Event"); }; s.getDigest = function (done) { done("digest"); };
+        s.request = function (method, url, headers, body, done, fail) {
+            if (method === "POST") { posts += 1; done({responseText: ""}); return; }
+            gets += 1;
+            if (mode === "error") { fail("通信失敗"); return; }
+            done({responseText: JSON.stringify({d: {EventDate: "2026-11-15T00:00:00Z",
+                EndDate: mode === "match" ? "2026-11-15T23:59:00Z" : "2026-11-16T23:59:00Z"}})});
+        };
+        s.update(item, function (saved, items, message) { warning = message || ""; }, assert.fail);
+        assert.strictEqual(posts, 1); assert.strictEqual(gets, 1);
+        if (mode === "match") { assert.strictEqual(warning, ""); }
+        else { assert.ok(warning.indexOf(mode === "error" ? "確認に失敗" : "2026-11-16") >= 0); }
+    });
 });
 console.log(count + " all-day tests passed");

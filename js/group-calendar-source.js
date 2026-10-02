@@ -198,13 +198,13 @@
         plain.id = method === "create" ? "" : original.item.calendarItemId;
         plain.lineStyle = "solid"; plain.lineColor = "default"; plain.textColor = "default";
         self.metadata.load(entry.guid, function (record) {
-            entry.client[method](plain, function (saved) {
+            entry.client[method](plain, function (saved, savedItems, calendarWarning) {
                 var result;
                 if (method === "remove") { delete record.data[String(plain.id)]; result = item; }
                 else { record.data[String(saved.id)] = extra; result = self.decorate(saved, entry, record); }
-                self.metadata.save(record, function () { success(result); }, function (message) {
+                self.metadata.save(record, function () { success(result, null, calendarWarning || ""); }, function (message) {
                     // The calendar write succeeded; never report it as a failed create (duplicate risk).
-                    success(result, null, "予定本体の変更は完了しましたが、反映先・色などの補助設定は保存できませんでした。" + message);
+                    success(result, null, (calendarWarning || "") + " 予定本体の変更は完了しましたが、反映先・色などの補助設定は保存できませんでした。" + message);
                 });
             }, failure);
         }, failure);
