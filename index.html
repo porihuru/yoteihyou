@@ -262,6 +262,16 @@
             </div>
             <div id="settings-status" class="settings-status" aria-live="polite"></div>
             <div class="cookie-settings">
+                <h3>休日設定（全利用者共通）</h3>
+                <p>1行に「日付 | 名称」。行を追加・書換え・削除して修正できます。例：2026-12-29 | 年末休業</p>
+                <p>初期値：2026～2028年の判明分49件。2026・2027年は内閣府公表済み。2028年は現行法による日付を登録し、未確定の春分・秋分の日は未登録です（2027年2月の公表後に追加してください）。独自休日を追加しても振替休日は自動生成しません。</p>
+                <label for="holiday-input">休日一覧（日付 | 名称）</label>
+                <textarea id="holiday-input" rows="12" style="width:100%;box-sizing:border-box" spellcheck="false"></textarea>
+                <button type="button" id="holiday-save" class="button button-primary">休日を共有保存</button>
+                <button type="button" id="holiday-reload" class="button">休日を再読込</button>
+                <div id="holiday-status" role="status" aria-live="polite"></div>
+            </div>
+            <div class="cookie-settings">
                 <strong>共通の文字設定</strong>
                 <div class="font-settings">
                     <label for="setting-font-family">文字のフォント
@@ -368,9 +378,11 @@
     <script src="js/system-log.js"></script>
     <script src="js/config.js"></script>
     <script src="config/organizations.js"></script>
+    <script src="config/holidays.js"></script>
     <script src="js/util.js"></script>
     <script src="js/csv-data-source.js"></script>
     <script src="js/sharepoint-data-source.js"></script>
+    <script src="js/holiday-settings.js"></script>
     <script src="js/history-data-source.js"></script>
     <script src="js/access-counter.js"></script>
     <script src="js/sharepoint-settings-data-source.js"></script>

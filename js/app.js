@@ -18,6 +18,8 @@
     var accessCounter = new window.YoteihyouAccessCounter(config.sharePoint);
     var organizationSettingsSource = new window.YoteihyouOrganizationSettingsDataSource(config.sharePoint);
     var settingsController = null;
+    var holidays = new window.YoteihyouHolidays(config.sharePoint,
+        function () { return !service.isReadOnly(); }, function () { renderCurrentView(); });
     var currentFontSize = 14;
     var displaySettingsSource = new window.YoteihyouDisplaySettingsDataSource(config.sharePoint);
     var sharedFontSettings = null;
@@ -1779,6 +1781,7 @@
         var row = document.createElement("tr");
         var label;
         var className;
+        var headerCell;
         var i;
         while (head.firstChild) {
             head.removeChild(head.firstChild);
@@ -1792,8 +1795,10 @@
             } else {
                 label = dates[i].getDate() + "（" + weekdays[dates[i].getDay()] + "）";
             }
-            className = dates[i].getDay() === 0 ? "sunday" : (dates[i].getDay() === 6 ? "saturday" : "");
-            row.appendChild(createHeaderCell(label, className));
+            className = holidays.dayClass(dates[i]);
+            headerCell = createHeaderCell(label, className);
+            headerCell.title = holidays.name(dates[i]);
+            row.appendChild(headerCell);
         }
         head.appendChild(row);
     }
@@ -1918,7 +1923,7 @@
                         scheduleCell.className = "organization-schedule-cell" +
                             (collapsed ? " organization-collapsed-cell" : " clickable-date") +
                             (viewMode === "weekly" || viewMode === "monthly" ?
-                                (date.getDay() === 6 ? " saturday" : date.getDay() === 0 ? " sunday" : "") : "");
+                                " " + holidays.dayClass(date) : "");
                         scheduleCell.title = collapsed ? "" :
                             formatJapaneseDate(date, true) + "の" + block.label + "に予定を追加";
                         if (!collapsed) {
@@ -2339,8 +2344,10 @@
         while (body.firstChild) {
             body.removeChild(body.firstChild);
         }
-        byId("month-title").innerHTML = formatJapaneseDate(day, true);
-        byId("print-heading").innerHTML = formatJapaneseDate(day, true) + "　日々予定表";
+        byId("month-title").textContent = formatJapaneseDate(day, true) + (holidays.name(day) ? " " + holidays.name(day) : "");
+        byId("month-title").style.color = holidays.dayClass(day) === "sunday" ? "#b91c1c" : "";
+        byId("print-heading").textContent = formatJapaneseDate(day, true) + (holidays.name(day) ? " " + holidays.name(day) : "") + "　日々予定表";
+        byId("print-heading").style.color = holidays.dayClass(day) === "sunday" ? "#b91c1c" : "";
 
         for (i = 0; i < items.length; i += 1) {
             maximumCaptionPixels = Math.max(maximumCaptionPixels, estimateDailyCaptionPixels(items[i]));
@@ -3552,6 +3559,8 @@
     }
 
     function renderCurrentView() {
+        byId("month-title").style.color = "";
+        byId("print-heading").style.color = "";
         cancelLayoutDrag();
         ensureLayout();
         updateViewControls();
@@ -3865,6 +3874,7 @@
         settingsController.initialize();
         renderCurrentView();
         loadFontSettings();
+        holidays.initialize();
         reloadData("");
         checkSystemConnections();
     }
