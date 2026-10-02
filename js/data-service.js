@@ -4,7 +4,9 @@
     function DataService(config) {
         this.sources = {
             csv: new window.YoteihyouCsvDataSource(config.csv),
-            sharepoint: new window.YoteihyouSharePointDataSource(config.sharePoint)
+            sharepoint: config.sharePoint.groupCalendars === true ?
+                new window.YoteihyouGroupCalendarSource(config.sharePoint) :
+                new window.YoteihyouSharePointDataSource(config.sharePoint)
         };
         this.history = new window.YoteihyouHistoryDataSource(config.sharePoint);
         this.mode = config.defaultDataSource === "sharepoint" ? "sharepoint" : "csv";
@@ -58,16 +60,16 @@
             failure("予定表は読取専用です。作業するには「予定表更新」を押してください。");
             return;
         }
-        this.sources[mode][method](item, function (saved, items) {
+        this.sources[mode][method](item, function (saved, items, sourceWarning) {
             var after = action === "delete" ? null : saved;
             if (mode === "csv") {
                 self.history.recordSample(action, before, after);
                 success(saved, items, "");
             } else {
                 self.history.record(action, before, after, function () {
-                    success(saved, items, "");
+                    success(saved, items, sourceWarning || "");
                 }, function (message) {
-                    success(saved, items, "予定の変更は完了しましたが、履歴の記録または整理に失敗しました。" + message);
+                    success(saved, items, (sourceWarning || "") + " 予定の変更は完了しましたが、履歴の記録または整理に失敗しました。" + message);
                 });
             }
         }, failure);

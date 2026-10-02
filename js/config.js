@@ -27,6 +27,7 @@
         },
 
         sharePoint: {
+            groupCalendars: true,
             /* 空欄の場合は、現在のSharePointサイトを使用します。 */
             siteUrl: "",
             listTitle: "予定表",
@@ -52,6 +53,8 @@
                     id: "ID",
                     groupName: "Title",
                     teamName: "TeamName",
+                    calendarSiteUrl: "CalendarSiteUrl",
+                    calendarListTitle: "CalendarListTitle",
                     monthlyRows: "MonthlyRows",
                     weeklyRows: "WeeklyRows",
                     dailyRows: "DailyRows",

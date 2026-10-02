@@ -53,8 +53,17 @@
 
     SharePointDataSource.prototype.request = function (method, url, headers, body, success, failure) {
         var xhr = new XMLHttpRequest();
+        var finished = false;
         var key;
         xhr.open(method, url, true);
+        if (this.options.timeout) {
+            xhr.timeout = this.options.timeout;
+            xhr.ontimeout = function () {
+                if (finished) { return; }
+                finished = true;
+                failure("SharePointへの接続がタイムアウトしました。");
+            };
+        }
         xhr.setRequestHeader("Accept", "application/json;odata=verbose");
         for (key in headers) {
             if (Object.prototype.hasOwnProperty.call(headers, key)) {
@@ -62,9 +71,10 @@
             }
         }
         xhr.onreadystatechange = function () {
-            if (xhr.readyState !== 4) {
+            if (xhr.readyState !== 4 || finished) {
                 return;
             }
+            finished = true;
             if ((xhr.status >= 200 && xhr.status < 300) || xhr.status === 304) {
                 success(xhr);
             } else if (xhr.status === 412) {
@@ -91,6 +101,7 @@
             startDate: startDate,
             endDate: endDate || startDate,
             allDay: f.allDay ? row[f.allDay] === true || row[f.allDay] === 1 : false,
+            recurring: f.recurrence ? !!row[f.recurrence] || Number(row[f.eventType] || 0) !== 0 : false,
             category: row[f.category] || "",
             location: row[f.location] || "",
             description: row[f.description] || "",
@@ -116,6 +127,7 @@
         var baseSelect = [f.id, f.title, f.startDate, f.endDate, f.category, f.location,
             f.description, f.purpose, f.created || "Created", f.modified || "Modified",
             authorField + "/Title", editorField + "/Title"];
+        baseSelect = baseSelect.filter(function (field) { return !!field; });
         var includeStyle = !!(f.lineStyle && f.lineColor && this.styleFieldsAvailable !== false);
         var includeTextColor = !!(f.textColor && this.textColorFieldAvailable !== false);
         var attempts = [{style: includeStyle, text: includeTextColor}];
@@ -124,6 +136,7 @@
         var url;
         var items = [];
         if (f.allDay) { baseSelect.push(f.allDay); }
+        if (f.recurrence) { baseSelect.push(f.recurrence, f.eventType); }
         if (includeTextColor) { attempts.push({style: includeStyle, text: false}); }
         if (includeStyle && includeTextColor) { attempts.push({style: false, text: true}); }
         if (includeStyle || includeTextColor) { attempts.push({style: false, text: false}); }
@@ -239,7 +252,7 @@
         payload[f.category] = item.category || "";
         payload[f.location] = item.location || "";
         payload[f.description] = item.description || "";
-        payload[f.purpose] = item.purpose || "";
+        if (f.purpose) { payload[f.purpose] = item.purpose || ""; }
         if (f.allDay) { payload[f.allDay] = !!item.allDay; }
         if (f.lineStyle && f.lineColor && this.styleFieldsAvailable !== false &&
                 (this.styleFieldsAvailable === true ||

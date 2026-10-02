@@ -30,6 +30,8 @@
             etag: row.__metadata && row.__metadata.etag ? row.__metadata.etag : "",
             groupName: row[f.groupName] || "",
             teamName: row[f.teamName] || "",
+            calendarSiteUrl: row[f.calendarSiteUrl] || "",
+            calendarListTitle: row[f.calendarListTitle] || "",
             monthlyRows: numberOrDefault(row[f.monthlyRows], 1),
             weeklyRows: numberOrDefault(row[f.weeklyRows], 1),
             dailyRows: numberOrDefault(row[f.dailyRows], 1),
@@ -55,6 +57,8 @@
         if (f.autoRows) {
             select.splice(6, 0, f.autoRows);
         }
+        if (f.calendarSiteUrl) { select.push(f.calendarSiteUrl); }
+        if (f.calendarListTitle) { select.push(f.calendarListTitle); }
         select = select.join(",");
         var url;
         var items = [];
@@ -102,6 +106,8 @@
         var payload = {__metadata: {type: entityType}};
         payload[f.groupName] = item.groupName;
         payload[f.teamName] = item.teamName || "";
+        if (f.calendarSiteUrl) { payload[f.calendarSiteUrl] = item.calendarSiteUrl || ""; }
+        if (f.calendarListTitle) { payload[f.calendarListTitle] = item.calendarListTitle || ""; }
         payload[f.monthlyRows] = item.monthlyRows;
         payload[f.weeklyRows] = item.weeklyRows;
         payload[f.dailyRows] = item.dailyRows;
@@ -210,19 +216,19 @@
             if (item.teamName) {
                 if (!group.teams) {
                     group.teams = [];
-                    delete group.monthlyRows;
-                    delete group.weeklyRows;
-                    delete group.dailyRows;
-                    delete group.autoRows;
                 }
                 group.teams.push({
                     name: item.teamName,
+                    calendarSiteUrl: item.calendarSiteUrl || "",
+                    calendarListTitle: item.calendarListTitle || "",
                     monthlyRows: item.monthlyRows,
                     weeklyRows: item.weeklyRows,
                     dailyRows: item.dailyRows,
                     autoRows: item.autoRows !== false
                 });
-            } else if (!group.teams) {
+            } else {
+                group.calendarSiteUrl = item.calendarSiteUrl || "";
+                group.calendarListTitle = item.calendarListTitle || "";
                 group.monthlyRows = item.monthlyRows;
                 group.weeklyRows = item.weeklyRows;
                 group.dailyRows = item.dailyRows;

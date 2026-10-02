@@ -57,7 +57,7 @@
         if (this.items.length === 0) {
             row = document.createElement("tr");
             actionCell = createCell("設定がありません。下のフォームから追加してください。");
-            actionCell.colSpan = 9;
+            actionCell.colSpan = 10;
             actionCell.className = "empty-schedule";
             row.appendChild(actionCell);
             body.appendChild(row);
@@ -71,6 +71,8 @@
             }
             row.appendChild(createCell(item.groupName));
             row.appendChild(createCell(item.teamName || "－"));
+            row.appendChild(createCell(item.calendarListTitle || "接続先未設定"));
+            row.title = item.calendarListTitle ? (item.calendarSiteUrl || "共通サイト") + " / " + item.calendarListTitle : "接続先未設定";
             row.appendChild(createCell(item.monthlyRows));
             row.appendChild(createCell(item.weeklyRows));
             row.appendChild(createCell(item.dailyRows));
@@ -99,6 +101,9 @@
         byId("setting-id").value = "";
         byId("setting-group-name").value = "";
         byId("setting-team-name").value = "";
+        byId("setting-calendar-site").value = "";
+        byId("setting-calendar-list").value = "";
+        byId("settings-calendar-status").textContent = "";
         byId("setting-monthly-rows").value = "5";
         byId("setting-weekly-rows").value = "5";
         byId("setting-daily-rows").value = "5";
@@ -114,6 +119,9 @@
         byId("setting-id").value = item.id;
         byId("setting-group-name").value = item.groupName;
         byId("setting-team-name").value = item.teamName;
+        byId("setting-calendar-site").value = item.calendarSiteUrl || "";
+        byId("setting-calendar-list").value = item.calendarListTitle || "";
+        byId("settings-calendar-status").textContent = "";
         byId("setting-monthly-rows").value = item.monthlyRows;
         byId("setting-weekly-rows").value = item.weeklyRows;
         byId("setting-daily-rows").value = item.dailyRows;
@@ -139,6 +147,8 @@
             etag: this.editingItem ? this.editingItem.etag : "",
             groupName: util.trim(byId("setting-group-name").value),
             teamName: util.trim(byId("setting-team-name").value),
+            calendarSiteUrl: util.trim(byId("setting-calendar-site").value).replace(/\/$/, ""),
+            calendarListTitle: util.trim(byId("setting-calendar-list").value),
             monthlyRows: this.readPositiveNumber("setting-monthly-rows", "月間行数"),
             weeklyRows: this.readPositiveNumber("setting-weekly-rows", "週間行数"),
             dailyRows: this.readPositiveNumber("setting-daily-rows", "日々行数"),
@@ -151,6 +161,9 @@
         if (!item.groupName) {
             throw new Error("大グループ名を入力してください。");
         }
+        if (item.calendarSiteUrl && !/^https?:\/\/[^\s?#]+$/i.test(item.calendarSiteUrl)) {
+            throw new Error("サイトURLはhttp://またはhttps://で始まるサイトのURLを入力してください。");
+        }
         if (isNaN(item.sortOrder)) {
             item.sortOrder = 0;
         }
@@ -161,9 +174,6 @@
             }
             if (existing.teamName === item.teamName) {
                 throw new Error("同じ大グループと小グループの設定が既にあります。");
-            }
-            if (!existing.teamName || !item.teamName) {
-                throw new Error("同じ大グループで「小グループなし」と小グループ設定は併用できません。");
             }
         }
         return item;
@@ -287,6 +297,20 @@
 
     SettingsController.prototype.initialize = function () {
         var self = this;
+        addEvent(byId("settings-check-calendar"), "click", function () {
+            var list = util.trim(byId("setting-calendar-list").value);
+            var site = util.trim(byId("setting-calendar-site").value) || self.source.client.siteUrl;
+            if (!list) { byId("settings-calendar-status").textContent = "予定表リスト名を入力してください。"; return; }
+            byId("settings-check-calendar").disabled = true;
+            byId("settings-calendar-status").textContent = "接続確認中…";
+            window.YoteihyouGroupCalendarSource.check(site, list, function () {
+                byId("settings-check-calendar").disabled = false;
+                byId("settings-calendar-status").textContent = "標準予定表の読込を確認しました。書込権限は保存時に確認します。";
+            }, function (message) {
+                byId("settings-check-calendar").disabled = false;
+                byId("settings-calendar-status").textContent = "接続失敗：" + message;
+            });
+        });
         addEvent(byId("open-settings"), "click", function () {
             self.open();
         });

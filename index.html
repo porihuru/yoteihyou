@@ -27,6 +27,7 @@
         </div>
 
         <div id="message" class="message" aria-live="polite"></div>
+        <div id="calendar-load-status" class="calendar-load-status" role="alert"></div>
 
         <div class="toolbar">
             <span class="view-switch">
@@ -302,6 +303,7 @@
                         <tr>
                             <th>大グループ</th>
                             <th>小グループ</th>
+                            <th>予定表リスト</th>
                             <th>月間</th>
                             <th>週間</th>
                             <th>日々</th>
@@ -317,6 +319,17 @@
             <form id="settings-form" class="settings-form">
                 <h3 id="settings-form-title">設定を追加</h3>
                 <input type="hidden" id="setting-id" value="">
+                <div class="form-row">
+                    <label for="setting-calendar-site">SharePointサイトURL（空欄は共通サイト）</label>
+                    <input type="text" id="setting-calendar-site" maxlength="255">
+                </div>
+                <div class="form-row">
+                    <label for="setting-calendar-list">接続する予定表リスト名</label>
+                    <input type="text" id="setting-calendar-list" maxlength="100">
+                    <button type="button" id="settings-check-calendar" class="button">予定表の接続確認</button>
+                    <p>SharePointで作成した標準の予定表を指定してください。予定表への列追加は不要です。空欄のグループは接続先未設定になります。</p>
+                    <div id="settings-calendar-status" role="status"></div>
+                </div>
                 <div class="form-row form-row-half">
                     <div>
                         <label for="setting-group-name">大グループ <span class="required">必須</span></label>
@@ -363,6 +376,7 @@
     <script src="js/sharepoint-settings-data-source.js"></script>
     <script src="js/display-settings-data-source.js"></script>
     <script src="js/schedule-layout.js"></script>
+    <script src="js/group-calendar-source.js"></script>
     <script src="js/data-service.js"></script>
     <script src="js/settings-controller.js"></script>
     <script src="js/date-time-editor.js"></script>

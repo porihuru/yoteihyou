@@ -1637,7 +1637,7 @@
         var j;
         for (i = 0; i < groups.length; i += 1) {
             teams = getOrganizationTeams(groups[i]);
-            if (teams.length === 0) {
+            if (teams.length === 0 || groups[i].calendarListTitle) {
                 blocks.push({
                     section: groups[i].name,
                     team: "",
@@ -1645,7 +1645,8 @@
                     rowCount: getConfiguredRowCount(groups[i], viewMode),
                     autoRows: groups[i].autoRows !== false
                 });
-            } else {
+            }
+            if (teams.length > 0) {
                 for (j = 0; j < teams.length; j += 1) {
                     blocks.push({
                         section: groups[i].name,
@@ -2651,7 +2652,8 @@
         var teams = getOrganizationTeams(section);
         var i;
         clearOptions(teamSelect);
-        addOption(teamSelect, teams.length > 0 ? "小グループを選択" : "小グループなし", "");
+        addOption(teamSelect, section && section.calendarListTitle ? "大グループ共通" :
+            (teams.length > 0 ? "小グループを選択" : "小グループなし"), "");
         for (i = 0; i < teams.length; i += 1) {
             addOption(teamSelect, teams[i].name, teams[i].name);
         }
@@ -3109,13 +3111,16 @@
         loadRequestId = requestId;
         setMessage("", false);
         setConnectionStatus((mode === "csv" ? "CSV" : "SharePoint") + " 読込中", "");
-        service.load(range, function (items) {
+        byId("calendar-load-status").textContent = "";
+        service.load(range, function (items, calendarWarning) {
             if (requestId !== loadRequestId) {
                 return;
             }
             state.items = items;
             renderCurrentView();
-            setConnectionStatus((mode === "csv" ? "試験用CSV" : "SharePoint") + " 接続済（" + items.length + "件）", "connected");
+            byId("calendar-load-status").textContent = calendarWarning ? "予定表の読込に関する注意（予定なしとは限りません）\n" + calendarWarning : "";
+            setConnectionStatus((mode === "csv" ? "試験用CSV" : "SharePoint") +
+                (calendarWarning ? " 一部未接続" : " 接続済") + "（" + items.length + "件）", calendarWarning ? "error" : "connected");
             if (successMessage) {
                 setMessage(successMessage, !!isWarning);
             }
@@ -3898,8 +3903,9 @@
             },
             onApply: function (newOrganizationConfig) {
                 organizationConfig = newOrganizationConfig;
+                if (service.sources.sharepoint.configure) { service.sources.sharepoint.configure(organizationConfig); }
                 loadOrganizationSections("", "");
-                renderCurrentView();
+                reloadData("");
             }
         });
         settingsController.initialize();
@@ -3946,13 +3952,22 @@
         var targets = [
             {client: schedule, fields: [f.id, f.title, f.startDate, f.endDate, f.allDay, f.category, f.location, f.description, f.purpose]},
             {client: organizationSettingsSource.client, disabled: !organizationSettingsSource.enabled,
-                fields: [org.id, org.groupName, org.teamName, org.monthlyRows, org.weeklyRows, org.dailyRows, org.autoRows, org.sortOrder, org.isActive]},
+                fields: [org.id, org.groupName, org.teamName, org.monthlyRows, org.weeklyRows, org.dailyRows, org.autoRows, org.sortOrder, org.isActive, org.calendarSiteUrl, org.calendarListTitle]},
             {client: displaySettingsSource.client, fields: ["ID", "Title", "FontFamily", "FontSize"]},
             {client: layoutSource.client, fields: ["ID", "Title", "LayoutJson"]},
             {client: service.history.api, fields: ["ID", "Title", "Action", "ScheduleItemId", "ScheduleList", "BeforeJson", "AfterJson"]},
             {client: accessCounter.api, fields: ["ID", "Title", "VisitCount"]}
         ];
         var remaining = targets.length + (service.getMode() === "csv" ? 1 : 0);
+        if (schedule.entries) {
+            targets.shift();
+            schedule.entries.forEach(function (entry) {
+                if (entry.client) {
+                    targets.push({client: entry.client, fields: ["ID", "Title", "EventDate", "EndDate", "fAllDayEvent", "Category", "Location", "Description"]});
+                }
+            });
+            remaining = targets.length + (service.getMode() === "csv" ? 1 : 0);
+        }
         byId("recheck-connections").disabled = true;
         function completed() {
             remaining -= 1;

@@ -13,6 +13,8 @@
             endDate: item.endDate ? util.toIsoString(item.endDate) : "",
             allDay: !!item.allDay,
             purpose: item.purpose || "",
+            calendarListTitle: item.calendarListTitle || "",
+            calendarSiteUrl: item.calendarSiteUrl || "",
             category: item.category || "",
             location: item.location || "",
             description: item.description || "",
@@ -30,6 +32,8 @@
             title: (item.groupName || "") + (item.teamName ? "／" + item.teamName : ""),
             groupName: item.groupName || "",
             teamName: item.teamName || "",
+            calendarListTitle: item.calendarListTitle || "",
+            calendarSiteUrl: item.calendarSiteUrl || "",
             monthlyRows: item.monthlyRows,
             weeklyRows: item.weeklyRows,
             dailyRows: item.dailyRows,
@@ -249,7 +253,8 @@
     };
 
     HistoryDataSource.prototype.record = function (action, before, after, success, failure) {
-        this.recordEntry(action, snapshot(before), snapshot(after), this.scheduleListTitle, success, failure);
+        this.recordEntry(action, snapshot(before), snapshot(after),
+            ((after || before) && (after || before).calendarListTitle) || this.scheduleListTitle, success, failure);
     };
 
     HistoryDataSource.prototype.recordSettings = function (action, before, after, success, failure) {
