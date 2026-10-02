@@ -1288,7 +1288,7 @@
     }
 
     function beginPeriodDrag(event, item, button, mode) {
-        if (service.isReadOnly()) { return; }
+        if (service.isReadOnly() || mode !== "move") { return; }
         selectDailyItem(item, button);
         hideDailyContextMenu();
         dailyInteraction.drag = {
@@ -1318,7 +1318,7 @@
     }
 
     function beginDailyDrag(event, item, button, mode) {
-        if (service.isReadOnly() || (item.allDay && mode !== "move")) {
+        if (service.isReadOnly() || mode !== "move") {
             return;
         }
         selectDailyItem(item, button);
@@ -1403,16 +1403,6 @@
         if (drag.mode === "move") {
             changed = moveItemToTarget(drag.item, drag.target);
             persistDailyItem(changed, false, "予定を移動しました。", null);
-        } else if (drag.period) {
-            try {
-                changed = getResizedPeriodItem(drag.item, drag.mode, drag.target);
-                persistDailyItem(changed, false,
-                    drag.mode === "start" ? "開始日を変更しました。" : "終了日を変更しました。", null);
-            } catch (error) {
-                setMessage(error.message, true);
-            }
-        } else {
-            resizeDailyItem(drag.item, drag.mode, drag.target);
         }
         return preventEvent(event);
     }
@@ -1472,18 +1462,6 @@
         caption.appendChild(document.createTextNode(showCaption === false ? "\u00a0" :
             item.title + (item.location ? "（" + item.location + "）" : "")));
         button.appendChild(caption);
-        if (startHere) {
-            startHandle = document.createElement("span");
-            startHandle.className = "period-resize-handle period-resize-start screen-only";
-            startHandle.title = "ドラッグして開始日を変更";
-            button.appendChild(startHandle);
-        }
-        if (endHere) {
-            endHandle = document.createElement("span");
-            endHandle.className = "period-resize-handle period-resize-end screen-only";
-            endHandle.title = "ドラッグして終了日を変更";
-            button.appendChild(endHandle);
-        }
         button.onclick = function (event) {
             stopEvent(event);
             if (dailyInteraction.suppressItemId === String(item.id)) {
@@ -1496,13 +1474,6 @@
         };
         button.onfocus = function () { selectDailyItem(item, button); };
         button.onmousedown = function (event) {
-            var source = (event || window.event).srcElement || (event || window.event).target;
-            if (hasClass(source, "period-resize-start")) {
-                return beginPeriodDrag(event || window.event, item, button, "start");
-            }
-            if (hasClass(source, "period-resize-end")) {
-                return beginPeriodDrag(event || window.event, item, button, "end");
-            }
             return beginPeriodDrag(event || window.event, item, button, "move");
         };
         button.oncontextmenu = function (event) {
@@ -2253,17 +2224,6 @@
         if (item.allDay) {
             button.removeChild(times);
             button.title = item.title + " / 終日" + (item.location ? " / " + item.location : "");
-        } else {
-            startHandle = document.createElement("span");
-            startHandle.className = "daily-resize-handle daily-resize-start screen-only";
-            startHandle.style.left = lineLeft + "%";
-            startHandle.title = "ドラッグして開始時刻を変更";
-            endHandle = document.createElement("span");
-            endHandle.className = "daily-resize-handle daily-resize-end screen-only";
-            endHandle.style.left = lineEnd + "%";
-            endHandle.title = "ドラッグして終了時刻を変更";
-            button.appendChild(startHandle);
-            button.appendChild(endHandle);
         }
         button.onclick = function (event) {
             var source = (event || window.event).srcElement || (event || window.event).target;
@@ -2284,12 +2244,6 @@
         };
         button.onmousedown = function (event) {
             var source = (event || window.event).srcElement || (event || window.event).target;
-            if (hasClass(source, "daily-resize-start")) {
-                return beginDailyDrag(event || window.event, item, button, "start");
-            }
-            if (hasClass(source, "daily-resize-end")) {
-                return beginDailyDrag(event || window.event, item, button, "end");
-            }
             if (findParentByClass(source, "daily-event-caption") || source === button) {
                 return beginDailyDrag(event || window.event, item, button, "move");
             }

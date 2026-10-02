@@ -1371,8 +1371,7 @@ test("週間・月間の予定に開始終了時刻と横線の設定を保持�
     assert.ok(button.children[0].className.indexOf("event-text-color-green") >= 0);
     assert.ok(button.children[2].className.indexOf("event-text-color-green") >= 0);
     assert.ok(button.children[2].children[0].indexOf("第１会議室") >= 0);
-    assert.ok(button.children[3].className.indexOf("period-resize-start") >= 0);
-    assert.ok(button.children[4].className.indexOf("period-resize-end") >= 0);
+    assert.strictEqual(button.children.length, 3);
     item.endDate = new Date(2026, 8, 26, 10, 45);
     button = scope.createEventButton(item, new Date(2026, 8, 25), "monthly", false);
     assert.ok(button.className.indexOf("period-continues-before") >= 0);
@@ -1383,7 +1382,7 @@ test("週間・月間の予定に開始終了時刻と横線の設定を保持�
     item.allDay = true;
     button = scope.createEventButton(item, day);
     assert.strictEqual(button.children[0].className.indexOf("daily-event-line") >= 0, true);
-    assert.strictEqual(button.children.length, 4);
+    assert.strictEqual(button.children.length, 2);
 });
 
 test("日々予定にドラッグ操作とコピー操作のUIがある", function () {
@@ -1391,8 +1390,8 @@ test("日々予定にドラッグ操作とコピー操作のUIがある", functi
     var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
     var html = fs.readFileSync(path.join(root, "index.html"), "utf8");
     assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "move")') >= 0);
-    assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "start")') >= 0);
-    assert.ok(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "end")') >= 0);
+    assert.strictEqual(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "start")'), -1);
+    assert.strictEqual(appSource.indexOf('beginDailyDrag(event || window.event, item, button, "end")'), -1);
     assert.ok(appSource.indexOf("event.keyCode === 67") >= 0);
     assert.ok(appSource.indexOf("event.keyCode === 88") >= 0);
     assert.ok(appSource.indexOf("event.keyCode === 86") >= 0);
