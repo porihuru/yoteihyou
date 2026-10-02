@@ -178,10 +178,10 @@
                 filter = f.startDate + " lt datetime'" + util.toIsoString(range.endDate) + "' and " +
                     f.endDate + " ge datetime'" + util.toIsoString(range.startDate) + "'";
                 if (f.allDay === "fAllDayEvent") {
-                    filter = "((" + f.allDay + " eq false) and (" + filter + ")) or ((" +
-                        f.allDay + " eq true) and (" + f.startDate + " lt datetime'" +
-                        allDayIso(range.endDate, false) + "' and " + f.endDate + " ge datetime'" +
-                        allDayIso(range.startDate, false) + "'))";
+                    // Do not filter the calendar's special all-day field on the server.
+                    // Fetch a bounded margin for floating dates, then use normalized dates below.
+                    filter = f.startDate + " lt datetime'" + util.toIsoString(new Date(range.endDate.getTime() + 86400000)) +
+                        "' and " + f.endDate + " ge datetime'" + util.toIsoString(new Date(range.startDate.getTime() - 86400000)) + "'";
                 }
             }
             url = buildUrl();
@@ -210,6 +210,12 @@
                     if (data.d && data.d.__next) {
                         loadPage(data.d.__next);
                     } else {
+                        if (f.allDay === "fAllDayEvent" && range && range.startDate && range.endDate) {
+                            items = items.filter(function (item) {
+                                return item.startDate && item.startDate.getTime() < range.endDate.getTime() &&
+                                    (item.endDate || item.startDate).getTime() >= range.startDate.getTime();
+                            });
+                        }
                         success(items);
                     }
                 } catch (error) {

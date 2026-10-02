@@ -70,14 +70,47 @@ test("通常予定と旧独自AllDay列の時差換算を維持", function () {
         assert.strictEqual(item.allDay, !!i);
     });
 });
-test("期間抽出は終日日付と通常予定のUTC日時を分ける", function () {
+test("サーバーの終日フラグ絞込を使わず日付の余裕を持って取得", function () {
     var s = source(), url;
     s.request = function (method, target, headers, body, done) { url = decodeURIComponent(target); done({responseText: '{"d":{"results":[]}}'}); };
     s.load({startDate: new Date(2026, 10, 15), endDate: new Date(2026, 10, 16)}, function () {}, assert.fail);
-    assert.ok(url.indexOf("fAllDayEvent eq true") >= 0);
-    assert.ok(url.indexOf("EventDate lt datetime'2026-11-16T00:00:00Z'") >= 0);
-    assert.ok(url.indexOf("EndDate ge datetime'2026-11-15T00:00:00Z'") >= 0);
-    assert.ok(url.indexOf("EventDate lt datetime'2026-11-15T15:00:00Z'") >= 0);
+    assert.strictEqual(url.indexOf("fAllDayEvent eq"), -1);
+    assert.ok(url.indexOf("EventDate lt datetime'2026-11-16T15:00:00Z'") >= 0);
+    assert.ok(url.indexOf("EndDate ge datetime'2026-11-13T15:00:00Z'") >= 0);
+});
+test("月初・月末の終日予定を残し前後月の予定を除く（ページング含む）", function () {
+    var s = source(), calls = 0, result;
+    function row(id, start, end, allDay) { return {ID: id, EventDate: start, EndDate: end, fAllDayEvent: allDay}; }
+    s.request = function (m, u, h, b, done) {
+        calls += 1;
+        done({responseText: JSON.stringify({d: calls === 1 ? {results: [
+            row(1, "2026-11-01T00:00:00Z", "2026-11-01T23:59:00Z", true),
+            row(2, "2026-10-31T00:00:00Z", "2026-10-31T23:59:00Z", true)
+        ], __next: "next-page"} : {results: [
+            row(3, "2026-11-30T00:00:00Z", "2026-11-30T23:59:00Z", true),
+            row(4, "2026-12-01T00:00:00Z", "2026-12-01T23:59:00Z", true),
+            row(5, "2026-10-31T15:00:00Z", "2026-10-31T16:00:00Z", false),
+            row(6, "2026-10-30T00:00:00Z", "2026-11-02T23:59:00Z", true)
+        ]}})});
+    };
+    s.load({startDate: new Date(2026, 10, 1), endDate: new Date(2026, 11, 1)}, function (items) { result = items; }, assert.fail);
+    assert.strictEqual(calls, 2);
+    assert.strictEqual(result.map(function (x) { return x.id; }).join(","), "1,3,5,6");
+});
+test("終日へ変更して保存・再取得した予定が月間の対象日に残る", function () {
+    var s = source(), saved, result;
+    var item = s.toItem({ID: 7, EventDate: "2026-11-15T00:00:00Z", EndDate: "2026-11-15T01:00:00Z", fAllDayEvent: false});
+    editor.set("start", item.startDate); editor.set("end", item.endDate);
+    item.allDay = true; item.startDate = editor.read("start", true); item.endDate = editor.read("end", true);
+    saved = s.toPayload(item, "Event"); saved.ID = 7;
+    s.request = function (m, u, h, b, done) { done({responseText: JSON.stringify({d: {results: [saved]}})}); };
+    s.load({startDate: new Date(2026, 10, 1), endDate: new Date(2026, 11, 1)}, function (items) { result = items; }, assert.fail);
+    assert.strictEqual(result.length, 1);
+    var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var scope = vm.createContext({startOfDay: function (d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }});
+    vm.runInContext(app.slice(app.indexOf("    function itemOccursOn("), app.indexOf("    function getLayoutScope(")), scope);
+    assert.strictEqual(scope.itemOccursOn(result[0], new Date(2026, 10, 15)), true);
+    assert.strictEqual(scope.itemOccursOn(result[0], new Date(2026, 10, 16)), false);
 });
 test("既に保存された複数日を推測で短縮しない", function () {
     var item = source().toItem({EventDate: "2026-11-15T00:00:00Z", EndDate: "2026-11-16T23:59:00Z", fAllDayEvent: true});
