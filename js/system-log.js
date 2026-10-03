@@ -5,6 +5,7 @@
         options = options || {};
         this.storage = options.storage || null;
         this.key = options.key || "yoteihyou.systemLog";
+        this.enabled = options.enabled !== false;
         this.entries = [];
         this.persistent = !!this.storage;
         this.onChange = function () {};
@@ -23,6 +24,10 @@
             }
         } catch (ignore) { this.persistent = false; }
     }
+    SystemLog.prototype.setEnabled = function (enabled) {
+        this.enabled = !!enabled;
+        this.onChange();
+    };
     SystemLog.prototype.changed = function () {
         this.entries = this.entries.slice(-LIMIT);
         if (this.storage) {
@@ -32,12 +37,14 @@
         this.onChange();
     };
     SystemLog.prototype.add = function (target, operation, status, detail) {
+        if (!this.enabled) { return null; }
         var entry = {id: this.session + ":" + (++this.sequence), time: new Date().toISOString(),
             target: String(target).slice(0, 300), operation: String(operation).slice(0, 100),
             status: status, detail: String(detail || "").slice(0, 1500)};
         this.entries.push(entry); this.changed(); return entry;
     };
     SystemLog.prototype.begin = function (target, operation) {
+        if (!this.enabled) { return function () {}; }
         var self = this, start = new Date().getTime();
         var entry = this.add(target, operation, "pending", "処理中");
         var finished = false;
@@ -59,7 +66,7 @@
         var self = this, original = object[method];
         object[method] = function () {
             var args = Array.prototype.slice.call(arguments), receiver = this;
-            if (skip && skip()) { return original.apply(receiver, args); }
+            if (!self.enabled || (skip && skip())) { return original.apply(receiver, args); }
             var finish = self.begin(target, method === "load" ? "読込" : "保存・更新");
             var success = args[successIndex], failure = args[failureIndex];
             args[successIndex] = function () {
@@ -118,11 +125,11 @@
     };
     window.YoteihyouSystemLog = SystemLog;
 
-    // Initialize before other application scripts so loading/runtime errors are visible.
+    // Initialize the viewer early; recording waits for the shared SharePoint setting.
     if (!document || !document.getElementById("open-system-log")) { return; }
     var storage = null;
     try { storage = window.localStorage; } catch (ignore) {}
-    var log = new SystemLog({storage: storage, key: "yoteihyou.systemLog:" + window.location.pathname});
+    var log = new SystemLog({storage: storage, key: "yoteihyou.systemLog:" + window.location.pathname, enabled: false});
     window.yoteihyouSystemLog = log;
     function byId(id) { return document.getElementById(id); }
     function textCell(row, value) { var cell = document.createElement("td"); cell.appendChild(document.createTextNode(value)); row.appendChild(cell); }
@@ -132,8 +139,12 @@
         for (i = 0; i < entries.length; i += 1) { if (entries[i].status === "error") { errors += 1; } if (entries[i].status === "pending") { pending += 1; } }
         byId("open-system-log").textContent = "システムログ" + (errors ? "（エラー " + errors + "）" : pending ? "（確認中）" : "");
         byId("open-system-log").className = "button button-small system-log-button screen-only" + (errors ? " system-log-errors" : "");
+        byId("toggle-system-log").textContent = "ログ記録：" + (log.enabled ? "オン" : "オフ");
+        byId("toggle-system-log").setAttribute("aria-pressed", log.enabled ? "true" : "false");
+        byId("toggle-system-log").className = "button" + (log.enabled ? " button-primary" : "");
         if (byId("system-log-panel").style.display === "none") { return; }
-        byId("system-log-status").textContent = "最新 " + entries.length + " / " + LIMIT + "件・処理中 " + pending + "件・エラー記録 " + errors + "件。" +
+        byId("system-log-status").textContent = (log.enabled ? "ログ記録：オン。" : "ログ記録：オフ（設定から再開できます）。") +
+            "最新 " + entries.length + " / " + LIMIT + "件・処理中 " + pending + "件・エラー記録 " + errors + "件。" +
             (log.persistent ? "このブラウザーに保持しています。" : "ブラウザー保存が利用できないため、現在の画面内だけに保持しています。");
         var body = byId("system-log-rows");
         while (body.firstChild) { body.removeChild(body.firstChild); }
@@ -167,5 +178,5 @@
             log.add("アプリファイル", "読込", "error", String(element.src || element.href || "").split("?")[0]);
         } else if (event.message) { log.add("JavaScript", "実行", "error", event.message + "（行 " + (event.lineno || "不明") + "）"); }
     }, true);
-    log.add("アプリ", "起動", "info", "起動しました。接続確認を開始します。");
+    render();
 }(window, typeof document === "undefined" ? null : document));

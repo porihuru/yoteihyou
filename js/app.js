@@ -24,6 +24,8 @@
     var displaySettingsSource = new window.YoteihyouDisplaySettingsDataSource(config.sharePoint);
     var sharedFontSettings = null;
     var fontSettingsBusy = false;
+    var sharedLogSettings = null;
+    var logSettingsBusy = false;
     var layoutEngine = window.YoteihyouScheduleLayout;
     var layoutSource = new layoutEngine.Source(config.sharePoint);
     var layoutRecord = null;
@@ -295,6 +297,7 @@
         byId("edit-mode-status").innerHTML = editable ? "更新可能" : "読取専用";
         byId("toggle-schedule-edit").innerHTML = editable ? "更新終了" : "予定表更新";
         byId("toggle-schedule-edit").setAttribute("aria-pressed", editable ? "true" : "false");
+        updateLogSettingsControls();
     }
 
     function toggleScheduleEdit() {
@@ -304,9 +307,9 @@
         if (byId("event-editor").style.display !== "none") { closeEditor(); }
         if (settingsController && byId("settings-panel").style.display !== "none") { settingsController.close(); }
         updateSourceControls();
+        // 更新状態はヘッダーに表示し、固定操作欄の裏に案内用の余白を作らない。
+        setMessage("", false);
         renderCurrentView();
-        setMessage(service.isReadOnly() ? "予定表を読取専用にしました。" :
-            "予定表を更新できる状態にしました。作業後は「更新終了」を押してください。", false);
     }
 
     function sameDate(a, b) {
@@ -3879,6 +3882,56 @@
         checkSystemConnections();
     }
 
+    function updateLogSettingsControls() {
+        byId("toggle-system-log").disabled = logSettingsBusy || !sharedLogSettings || service.isReadOnly();
+        byId("reload-system-log-setting").disabled = logSettingsBusy;
+    }
+
+    function logSettingsStatus(message, error) {
+        var element = byId("system-log-setting-status");
+        element.className = "settings-status" + (error ? " error" : "");
+        element.textContent = message;
+    }
+
+    function loadLogSettings(message) {
+        if (logSettingsBusy) { return; }
+        logSettingsBusy = true;
+        updateLogSettingsControls();
+        logSettingsStatus("SharePointからログ記録設定を読み込んでいます。", false);
+        displaySettingsSource.loadLogging(function (item) {
+            sharedLogSettings = item;
+            window.yoteihyouSystemLog.setEnabled(item.enabled);
+            logSettingsBusy = false;
+            updateLogSettingsControls();
+            logSettingsStatus(message || "SharePointの共通設定を適用しました。変更するには「予定表更新」を押してください。", false);
+        }, function (error) {
+            sharedLogSettings = null;
+            logSettingsBusy = false;
+            updateLogSettingsControls();
+            logSettingsStatus((message ? message + " 再読込に失敗しました。 " : "") + error +
+                " 現在の記録状態を維持します。", true);
+        });
+    }
+
+    function toggleLogSettings() {
+        if (logSettingsBusy || !sharedLogSettings || service.isReadOnly()) { return; }
+        var enabled = !window.yoteihyouSystemLog.enabled;
+        logSettingsBusy = true;
+        updateLogSettingsControls();
+        logSettingsStatus("SharePointにログ記録設定を保存しています。", false);
+        displaySettingsSource.saveLogging(sharedLogSettings, enabled, function () {
+            window.yoteihyouSystemLog.setEnabled(enabled);
+            sharedLogSettings = null;
+            logSettingsBusy = false;
+            loadLogSettings("ログ記録設定をSharePointに保存しました。");
+        }, function (error) {
+            sharedLogSettings = null;
+            logSettingsBusy = false;
+            updateLogSettingsControls();
+            logSettingsStatus("保存できませんでした。ログ記録設定は変更していません。再読込してからやり直してください。 " + error, true);
+        });
+    }
+
     function initializeSystemLog() {
         var log = window.yoteihyouSystemLog;
         function target(client) { return client.listTitle + (client.siteUrl ? " / " + client.siteUrl : ""); }
@@ -3908,6 +3961,9 @@
         log.observe(displaySettingsSource, "save", target(displaySettingsSource.client), 3, 4);
         log.observe(accessCounter, "increment", target(accessCounter.api), 0, 1, function () { return !accessCounter.api.siteUrl; });
         byId("recheck-connections").onclick = checkSystemConnections;
+        byId("toggle-system-log").onclick = toggleLogSettings;
+        byId("reload-system-log-setting").onclick = function () { loadLogSettings(); };
+        loadLogSettings();
     }
 
     function checkSystemConnections() {

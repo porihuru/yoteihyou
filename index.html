@@ -20,7 +20,7 @@
                 <button type="button" id="reload-button" class="button button-small">再読込</button>
             </div>
             <div id="connection-status" class="connection-status" aria-live="polite">読込準備中</div>
-            <span id="edit-mode-status" class="edit-mode-status">読取専用</span>
+            <span id="edit-mode-status" class="edit-mode-status" aria-live="polite">読取専用</span>
             <button type="button" id="toggle-schedule-edit" class="button button-small" aria-pressed="false">予定表更新</button>
             <button type="button" id="toggle-layout-edit" class="button button-small screen-only" aria-pressed="false" disabled title="オンにすると予定の↕で上下を入れ替えできます">上下入れ替え</button>
             <span id="access-counter" class="access-counter" title="SharePointの共通アクセス数を確認しています。" aria-live="polite">アクセス 確認中</span>
@@ -261,6 +261,13 @@
                 <button type="button" id="close-settings" class="button">閉じる</button>
             </div>
             <div id="settings-status" class="settings-status" aria-live="polite"></div>
+            <div class="cookie-settings">
+                <strong>システムログの記録（全利用者共通）</strong>
+                <p>「予定表更新」モードで切り替えるとSharePointに保存します。オフの間は新しいログを記録せず、記録済みのログは閲覧できます。開始済みの処理は完了結果まで記録します。</p>
+                <button type="button" id="toggle-system-log" class="button" aria-pressed="false" aria-describedby="system-log-setting-status" disabled>ログ記録：オフ</button>
+                <button type="button" id="reload-system-log-setting" class="button">ログ記録設定を再読込</button>
+                <div id="system-log-setting-status" role="status" aria-live="polite">SharePointのログ記録設定を読み込むまで記録を停止しています。</div>
+            </div>
             <div class="cookie-settings">
                 <h3>休日設定（全利用者共通）</h3>
                 <p>1行に「日付 | 名称」。行を追加・書換え・削除して修正できます。例：2026-12-29 | 年末休業</p>

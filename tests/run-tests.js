@@ -1549,6 +1549,102 @@ test("共有文字設定をリストから取得しETag付きで保存する", f
     assert.strictEqual(error, "競合");
 });
 
+test("共有ログ記録設定を読み込み、対象列だけをETag付きで保存する", function () {
+    var browser = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js", "js/display-settings-data-source.js"]);
+    var source = new browser.window.YoteihyouDisplaySettingsDataSource({siteUrl: "https://example.invalid/sites/test"});
+    var enabled = false, version = 3, loaded, payload;
+    function fail(message) { throw new Error(message); }
+    source.client.getEntityType = function (done) { done("Settings"); };
+    source.client.getDigest = function (done) { done("digest"); };
+    source.client.request = function (method, url, headers, body, done) {
+        if (method === "GET") {
+            assert.ok(url.indexOf("$select=ID,SystemLogEnabled") >= 0);
+            assert.ok(decodeURIComponent(url).indexOf("Title eq 'default'") >= 0);
+            done({responseText: JSON.stringify({d: {results: [{ID: 8, SystemLogEnabled: enabled, __metadata: {etag: String(version)}}]}})});
+        } else {
+            assert.strictEqual(headers["IF-MATCH"], String(version));
+            assert.strictEqual(headers["X-HTTP-Method"], "MERGE");
+            assert.strictEqual(headers["X-RequestDigest"], "digest");
+            payload = JSON.parse(body);
+            assert.deepStrictEqual(Object.keys(payload).sort(), ["SystemLogEnabled", "__metadata"]);
+            enabled = payload.SystemLogEnabled;
+            version += 1;
+            done({});
+        }
+    };
+    source.loadLogging(function (item) { loaded = item; }, fail);
+    assert.strictEqual(loaded.enabled, false);
+    source.saveLogging(loaded, true, function () {}, fail);
+    source.loadLogging(function (item) { loaded = item; }, fail);
+    assert.strictEqual(loaded.enabled, true);
+    assert.strictEqual(loaded.etag, "4");
+    source.saveLogging(loaded, false, function () {}, fail);
+    assert.strictEqual(enabled, false);
+});
+
+test("共有ログ設定の列不足・重複・未設定・権限不足・競合を成功扱いにしない", function () {
+    var browser = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js", "js/display-settings-data-source.js"]);
+    var source = new browser.window.YoteihyouDisplaySettingsDataSource({siteUrl: "https://example.invalid/sites/test"});
+    var failures = 0;
+    function success() { throw new Error("不正な設定を成功扱いにしました"); }
+    function fail() { failures += 1; }
+    [[], [{ID: 8}], [{ID: 8, SystemLogEnabled: "false", __metadata: {etag: "1"}}],
+        [{ID: 8, SystemLogEnabled: true}], [{ID: 8}, {ID: 9}]].forEach(function (rows) {
+        source.client.request = function (method, url, headers, body, done) { done({responseText: JSON.stringify({d: {results: rows}})}); };
+        source.loadLogging(success, fail);
+    });
+    source.client.getEntityType = function (done) { done("Settings"); };
+    source.client.getDigest = function (done) { done("digest"); };
+    [403, 412].forEach(function (status) {
+        source.client.request = function (method, url, headers, body, done, failure) { failure("失敗", status); };
+        source.saveLogging({id: 8, etag: "1"}, false, success, fail);
+    });
+    source.saveLogging({id: 8}, true, success, fail);
+    source.client.siteUrl = "";
+    source.loadLogging(success, fail);
+    source.saveLogging({id: 8, etag: "1"}, true, success, fail);
+    assert.strictEqual(failures, 10);
+});
+
+test("共有ログ記録設定は保存成功後だけ反映し、失敗・読取専用・二重操作では切り替えない", function () {
+    var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8"), buttons = {}, saveDone, saveFailed, loadDone, loadFailed;
+    var writes = 0, readOnly = false, log = {enabled: false, setEnabled: function (value) { this.enabled = value; }};
+    ["toggle-system-log", "reload-system-log-setting", "system-log-setting-status"].forEach(function (id) { buttons[id] = {}; });
+    var scope = vm.createContext({sharedLogSettings: null, logSettingsBusy: false,
+        window: {yoteihyouSystemLog: log}, byId: function (id) { return buttons[id]; },
+        service: {isReadOnly: function () { return readOnly; }},
+        displaySettingsSource: {
+            loadLogging: function (done, fail) { loadDone = done; loadFailed = fail; },
+            saveLogging: function (item, enabled, done, fail) { writes += 1; saveDone = done; saveFailed = fail; }
+        }});
+    vm.runInContext(app.slice(app.indexOf("    function updateLogSettingsControls("), app.indexOf("    function initializeSystemLog(")), scope);
+    scope.loadLogSettings();
+    assert.strictEqual(buttons["toggle-system-log"].disabled, true);
+    loadDone({id: 8, etag: "1", enabled: false});
+    readOnly = true;
+    scope.toggleLogSettings();
+    assert.strictEqual(writes, 0);
+    readOnly = false;
+    scope.toggleLogSettings();
+    scope.toggleLogSettings();
+    assert.strictEqual(writes, 1);
+    assert.strictEqual(log.enabled, false);
+    saveFailed("競合");
+    assert.strictEqual(log.enabled, false);
+    assert.strictEqual(buttons["toggle-system-log"].disabled, true);
+    scope.loadLogSettings();
+    loadDone({id: 8, etag: "2", enabled: false});
+    scope.toggleLogSettings();
+    saveDone();
+    assert.strictEqual(log.enabled, true);
+    loadDone({id: 8, etag: "3", enabled: true});
+    assert.strictEqual(scope.sharedLogSettings.etag, "3");
+    scope.loadLogSettings();
+    loadFailed("接続失敗");
+    assert.strictEqual(log.enabled, true);
+    assert.strictEqual(buttons["toggle-system-log"].disabled, true);
+});
+
 var layoutContext = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js", "js/schedule-layout.js"]);
 var layout = layoutContext.window.YoteihyouScheduleLayout;
 
@@ -1946,6 +2042,58 @@ test("システムログは300件を保持して再読込し、保存制限で�
     reloaded.add("list", "読込", "error", "失敗");
     assert.strictEqual(reloaded.persistent, false);
     assert.strictEqual(reloaded.entries[299].detail, "失敗");
+});
+
+test("ログ記録のオンオフは端末に保存せず、停止中も過去のログを保持して再開できる", function () {
+    var saved = {}, storage = {getItem: function (key) { return saved[key]; },
+        setItem: function (key, value) { saved[key] = value; }};
+    var fixture = makeLogFixture(storage), log = fixture.log;
+    assert.strictEqual(log.enabled, true);
+    log.add("アプリ", "起動", "info", "開始");
+    log.setEnabled(false);
+    assert.strictEqual(saved["yoteihyou.systemLog.enabled"], undefined);
+    log.add("JavaScript", "実行", "error", "停止中");
+    log.begin("リスト", "読込")("success", "停止中");
+    assert.strictEqual(log.entries.length, 1);
+    assert.strictEqual(fixture.timers.length, 0);
+    log = makeLogFixture(storage).log;
+    saved["yoteihyou.systemLog.enabled"] = "false";
+    assert.strictEqual(makeLogFixture(storage).log.enabled, true);
+    assert.strictEqual(log.entries.length, 1);
+    log.setEnabled(true);
+    log.add("リスト", "読込", "success", "再開");
+    assert.strictEqual(log.entries.length, 2);
+    assert.strictEqual(makeLogFixture(storage).log.enabled, true);
+});
+
+test("ログ停止中も元の処理・コールバック・例外を維持し、開始済みの記録は完了する", function () {
+    var fixture = makeLogFixture(), log = fixture.log, callback, received;
+    var source = {load: function (done) { callback = done; return 7; }};
+    log.observe(source, "load", "予定表", 0, 1);
+    source.load(function (value) { received = value; });
+    log.setEnabled(false);
+    callback("完了");
+    assert.strictEqual(received, "完了");
+    assert.strictEqual(log.entries[0].status, "success");
+    var done = function () {};
+    assert.strictEqual(source.load(done), 7);
+    assert.strictEqual(callback, done);
+    assert.strictEqual(log.entries.length, 1);
+    var failure = {load: function () { throw new Error("通信エラー"); }};
+    log.observe(failure, "load", "予定表", 0, 1);
+    assert.throws(function () { failure.load(); }, /通信エラー/);
+    assert.strictEqual(log.entries.length, 1);
+});
+
+test("ブラウザー保存を利用できなくても取得済みのログ記録設定を適用できる", function () {
+    var log = makeLogFixture({getItem: function () { throw new Error("blocked"); },
+        setItem: function () { throw new Error("blocked"); }}).log;
+    log.setEnabled(false);
+    log.add("アプリ", "起動", "info", "停止中");
+    assert.strictEqual(log.entries.length, 0);
+    log.setEnabled(true);
+    log.add("アプリ", "起動", "info", "再開");
+    assert.strictEqual(log.entries.length, 1);
 });
 
 test("システムログの監視はコールバックと戻り値を維持し、処理結果を一度だけ記録する", function () {
