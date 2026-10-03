@@ -261,55 +261,7 @@
                 <button type="button" id="close-settings" class="button">閉じる</button>
             </div>
             <div id="settings-status" class="settings-status" aria-live="polite"></div>
-            <div class="cookie-settings">
-                <strong>システムログの記録（全利用者共通）</strong>
-                <p>「予定表更新」モードで切り替えるとSharePointに保存します。オフの間は新しいログを記録せず、記録済みのログは閲覧できます。開始済みの処理は完了結果まで記録します。</p>
-                <button type="button" id="toggle-system-log" class="button" aria-pressed="false" aria-describedby="system-log-setting-status" disabled>ログ記録：オフ</button>
-                <button type="button" id="reload-system-log-setting" class="button">ログ記録設定を再読込</button>
-                <div id="system-log-setting-status" role="status" aria-live="polite">SharePointのログ記録設定を読み込むまで記録を停止しています。</div>
-            </div>
-            <div class="cookie-settings">
-                <h3>休日設定（全利用者共通）</h3>
-                <p>1行に「日付 | 名称」。行を追加・書換え・削除して修正できます。例：2026-12-29 | 年末休業</p>
-                <p>初期値：2026～2028年の判明分49件。2026・2027年は内閣府公表済み。2028年は現行法による日付を登録し、未確定の春分・秋分の日は未登録です（2027年2月の公表後に追加してください）。独自休日を追加しても振替休日は自動生成しません。</p>
-                <label for="holiday-input">休日一覧（日付 | 名称）</label>
-                <textarea id="holiday-input" rows="12" style="width:100%;box-sizing:border-box" spellcheck="false"></textarea>
-                <button type="button" id="holiday-save" class="button button-primary">休日を共有保存</button>
-                <button type="button" id="holiday-reload" class="button">休日を再読込</button>
-                <div id="holiday-status" role="status" aria-live="polite"></div>
-            </div>
-            <div class="cookie-settings">
-                <strong>共通の文字設定</strong>
-                <div class="font-settings">
-                    <label for="setting-font-family">文字のフォント
-                        <select id="setting-font-family">
-                            <option value="default">標準（Yu Gothic UI）</option>
-                            <option value="meiryo">メイリオ</option>
-                            <option value="gothic">ＭＳ ゴシック</option>
-                            <option value="mincho">ＭＳ 明朝</option>
-                        </select>
-                    </label>
-                    <label for="setting-font-size">文字の大きさ
-                        <select id="setting-font-size">
-                            <option value="12">小（12px）</option>
-                            <option value="14">標準（14px）</option>
-                            <option value="16">大（16px）</option>
-                            <option value="18">特大（18px）</option>
-                            <option value="20">最大（20px）</option>
-                        </select>
-                    </label>
-                </div>
-                <p>選択すると表示を確認できます。「文字設定をリストに保存」で全利用者の共通設定として保存します。保存には「予定表更新」が必要です。端末にないフォントは代替フォントで表示します。</p>
-                <button type="button" id="save-font-settings" class="button button-primary">文字設定をリストに保存</button>
-                <button type="button" id="reload-font-settings" class="button">文字設定を再読込</button>
-                <div id="font-settings-status" class="settings-status" aria-live="polite"></div>
-            </div>
-            <div class="cookie-settings">
-                <strong>この端末の表示設定</strong>
-                <p>グループ開閉状態、表示モード、ダークモード、倍率、印刷設定をCookieに保存します。初期化すると、これらの設定を削除します。リストの文字設定は変更しません。</p>
-                <button type="button" id="reset-display-cookies" class="button">表示設定Cookieを初期化</button>
-                <div id="cookie-settings-status" class="settings-status cookie-settings-status" aria-live="polite" style="display:none;"></div>
-            </div>
+            <h3>グループの設定</h3>
             <div class="settings-actions">
                 <button type="button" id="settings-new" class="button button-primary">新規設定</button>
                 <button type="button" id="settings-reload" class="button">SharePointから再読込</button>
@@ -373,6 +325,55 @@
                     <button type="button" id="settings-cancel-edit" class="button">入力取消</button>
                 </div>
             </form>
+            <div class="cookie-settings">
+                <strong>共通の文字設定</strong>
+                <div class="font-settings">
+                    <label for="setting-font-family">文字のフォント
+                        <select id="setting-font-family">
+                            <option value="default">標準（Yu Gothic UI）</option>
+                            <option value="meiryo">メイリオ</option>
+                            <option value="gothic">ＭＳ ゴシック</option>
+                            <option value="mincho">ＭＳ 明朝</option>
+                        </select>
+                    </label>
+                    <label for="setting-font-size">文字の大きさ
+                        <select id="setting-font-size">
+                            <option value="12">小（12px）</option>
+                            <option value="14">標準（14px）</option>
+                            <option value="16">大（16px）</option>
+                            <option value="18">特大（18px）</option>
+                            <option value="20">最大（20px）</option>
+                        </select>
+                    </label>
+                </div>
+                <p>選択すると表示を確認できます。「文字設定をリストに保存」で全利用者の共通設定として保存します。保存には「予定表更新」が必要です。端末にないフォントは代替フォントで表示します。</p>
+                <button type="button" id="save-font-settings" class="button button-primary">文字設定をリストに保存</button>
+                <button type="button" id="reload-font-settings" class="button">文字設定を再読込</button>
+                <div id="font-settings-status" class="settings-status" aria-live="polite"></div>
+            </div>
+            <div class="cookie-settings">
+                <strong>システムログの記録（全利用者共通）</strong>
+                <p>「予定表更新」モードで切り替えるとSharePointに保存します。オフの間は新しいログを記録せず、記録済みのログは閲覧できます。開始済みの処理は完了結果まで記録します。</p>
+                <button type="button" id="toggle-system-log" class="button" aria-pressed="false" aria-describedby="system-log-setting-status" disabled>ログ記録：オフ</button>
+                <button type="button" id="reload-system-log-setting" class="button">ログ記録設定を再読込</button>
+                <div id="system-log-setting-status" role="status" aria-live="polite">SharePointのログ記録設定を読み込むまで記録を停止しています。</div>
+            </div>
+            <div class="cookie-settings">
+                <h3>休日設定（全利用者共通）</h3>
+                <p>1行に「日付 | 名称」。行を追加・書換え・削除して修正できます。例：2026-12-29 | 年末休業</p>
+                <p>初期値：2026～2028年の判明分49件。2026・2027年は内閣府公表済み。2028年は現行法による日付を登録し、未確定の春分・秋分の日は未登録です（2027年2月の公表後に追加してください）。独自休日を追加しても振替休日は自動生成しません。</p>
+                <label for="holiday-input">休日一覧（日付 | 名称）</label>
+                <textarea id="holiday-input" rows="12" style="width:100%;box-sizing:border-box" spellcheck="false"></textarea>
+                <button type="button" id="holiday-save" class="button button-primary">休日を共有保存</button>
+                <button type="button" id="holiday-reload" class="button">休日を再読込</button>
+                <div id="holiday-status" role="status" aria-live="polite"></div>
+            </div>
+            <div class="cookie-settings">
+                <strong>この端末の表示設定</strong>
+                <p>グループ開閉状態、表示モード、ダークモード、倍率、印刷設定をCookieに保存します。初期化すると、これらの設定を削除します。リストの文字設定は変更しません。</p>
+                <button type="button" id="reset-display-cookies" class="button">表示設定Cookieを初期化</button>
+                <div id="cookie-settings-status" class="settings-status cookie-settings-status" aria-live="polite" style="display:none;"></div>
+            </div>
         </div>
     </div>
 
