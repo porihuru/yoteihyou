@@ -26,6 +26,9 @@
     var fontSettingsBusy = false;
     var sharedLogSettings = null;
     var logSettingsBusy = false;
+    var sharedWeeklySettings = null;
+    var weeklySettingsBusy = false;
+    var weeklyDisplaySettings = {showTime: true, showMultiDayLine: false};
     var layoutEngine = window.YoteihyouScheduleLayout;
     var layoutSource = new layoutEngine.Source(config.sharePoint);
     var layoutRecord = null;
@@ -167,6 +170,15 @@
         header.parentNode.insertBefore(fixedHeader.headerPlaceholder, header);
         toolbar.parentNode.insertBefore(fixedHeader.toolbarPlaceholder, toolbar);
         document.body.appendChild(fixedHeader.axisOverlay);
+        if (window.ResizeObserver) {
+            fixedHeader.resizeObserver = new window.ResizeObserver(function () {
+                updateWeeklyColumnWidths();
+                updateFixedHeader();
+            });
+            ["app", "monthly-view", "weekly-view", "daily-view"].forEach(function (id) {
+                fixedHeader.resizeObserver.observe(byId(id));
+            });
+        }
     }
 
     function releaseFixedHeader() {
@@ -202,24 +214,35 @@
         var source = byId(headId);
         var sourceTable = byId(viewId).getElementsByTagName("table")[0];
         var copy;
-        var cells;
-        var sourceCells;
-        var i;
         if (!overlay || !source.firstChild) { return; }
         overlay.innerHTML = "";
         copy = document.createElement("table");
         copy.className = sourceTable.className;
-        copy.style.width = sourceTable.offsetWidth + "px";
         copy.style.minWidth = "0";
         copy.appendChild(source.cloneNode(true));
+        overlay.appendChild(copy);
+        syncFixedTimeAxis();
+    }
+
+    function syncFixedTimeAxis() {
+        var overlay = fixedHeader.axisOverlay;
+        var view = byId(state.viewMode + "-view");
+        var sourceTable = view.getElementsByTagName("table")[0];
+        var source = sourceTable.getElementsByTagName("thead")[0];
+        var copy = overlay && overlay.firstChild;
+        var scale = currentDisplayZoom / 100;
+        var cells, sourceCells, i;
+        if (!copy || !source) { return; }
+        overlay.style.fontSize = view.style.fontSize;
+        overlay.style.fontFamily = view.style.fontFamily;
+        copy.style.width = sourceTable.getBoundingClientRect().width / scale + "px";
         cells = copy.getElementsByTagName("th");
         sourceCells = source.getElementsByTagName("th");
         if (cells.length === sourceCells.length) {
             for (i = 0; i < cells.length; i += 1) {
-                cells[i].style.width = sourceCells[i].offsetWidth + "px";
+                cells[i].style.width = sourceCells[i].getBoundingClientRect().width / scale + "px";
             }
         }
-        overlay.appendChild(copy);
     }
 
     function updateFixedHeader() {
@@ -235,6 +258,7 @@
         var dailyRect;
         var scale = currentDisplayZoom / 100;
         var toolbarBottom;
+        var headerHeight, toolbarHeight, contentLeft, contentBottom, axisTop;
         if (!fixedHeader.headerPlaceholder) { return; }
         header = document.getElementsByClassName("app-header")[0];
         toolbar = document.getElementsByClassName("toolbar")[0];
@@ -261,26 +285,32 @@
         }
         shellRect = shell.getBoundingClientRect();
         header.style.left = shellRect.left / scale + "px";
-        header.style.width = shell.offsetWidth + "px";
-        fixedHeader.headerPlaceholder.style.height = header.offsetHeight + "px";
+        header.style.width = shellRect.width / scale + "px";
+        headerHeight = header.getBoundingClientRect().height / scale;
+        fixedHeader.headerPlaceholder.style.height = headerHeight + "px";
         toolbar.style.left = shellRect.left / scale + "px";
-        toolbar.style.width = shell.offsetWidth + "px";
-        toolbar.style.top = header.offsetHeight + fixedHeader.toolbarGap + "px";
-        fixedHeader.toolbarPlaceholder.style.height = toolbar.offsetHeight + "px";
-        toolbarBottom = (header.offsetHeight + fixedHeader.toolbarGap + toolbar.offsetHeight) * scale;
+        toolbar.style.width = shellRect.width / scale + "px";
+        toolbar.style.top = headerHeight + fixedHeader.toolbarGap + "px";
+        toolbarHeight = toolbar.getBoundingClientRect().height / scale;
+        fixedHeader.toolbarPlaceholder.style.height = toolbarHeight + "px";
+        toolbarBottom = toolbar.getBoundingClientRect().bottom;
+        syncFixedTimeAxis();
         axis = byId(state.viewMode === "daily" ? "daily-head" :
             state.viewMode === "weekly" ? "weekly-head" : "monthly-head");
         axisRect = axis.getBoundingClientRect();
         dailyRect = scheduleView.getBoundingClientRect();
         tableRect = scheduleTable.getBoundingClientRect();
-        if (axisRect.top <= toolbarBottom && dailyRect.bottom > toolbarBottom + axis.offsetHeight * scale) {
+        contentLeft = dailyRect.left + scheduleView.clientLeft * scale;
+        contentBottom = dailyRect.top + (scheduleView.clientTop + scheduleView.clientHeight) * scale;
+        axisTop = Math.max(toolbarBottom, dailyRect.top + scheduleView.clientTop * scale);
+        if (axisRect.top <= axisTop + 1 && contentBottom > axisTop + axisRect.height) {
             fixedHeader.axisOverlay.style.display = "block";
-            fixedHeader.axisOverlay.style.top = toolbarBottom / scale + "px";
-            fixedHeader.axisOverlay.style.left = dailyRect.left / scale + "px";
-            fixedHeader.axisOverlay.style.width = Math.min(scheduleView.offsetWidth, shell.offsetWidth) + "px";
+            fixedHeader.axisOverlay.style.top = axisTop / scale + "px";
+            fixedHeader.axisOverlay.style.left = contentLeft / scale + "px";
+            fixedHeader.axisOverlay.style.width = scheduleView.clientWidth + "px";
             if (fixedHeader.axisOverlay.firstChild) {
                 fixedHeader.axisOverlay.firstChild.style.marginLeft =
-                    (tableRect.left - dailyRect.left) / scale - 1 + "px";
+                    (tableRect.left - contentLeft) / scale + "px";
             }
         } else {
             fixedHeader.axisOverlay.style.display = "none";
@@ -298,6 +328,7 @@
         byId("toggle-schedule-edit").innerHTML = editable ? "更新終了" : "予定表更新";
         byId("toggle-schedule-edit").setAttribute("aria-pressed", editable ? "true" : "false");
         updateLogSettingsControls();
+        updateWeeklySettingsControls();
     }
 
     function toggleScheduleEdit() {
@@ -347,7 +378,12 @@
 
     function getLayoutScope(item, day, viewMode) {
         var purpose = splitPurpose(item.purpose || "");
-        return JSON.stringify([viewMode === "monthly" ? "month" : util.formatDateKey(day), purpose.section, purpose.team]);
+        return JSON.stringify([getLayoutDateScope(day, viewMode), purpose.section, purpose.team]);
+    }
+
+    function getLayoutDateScope(day, viewMode) {
+        return viewMode === "monthly" ? "month" :
+            viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine ? "week" : util.formatDateKey(day);
     }
 
     function getLayoutRows(item, day, viewMode) {
@@ -557,7 +593,7 @@
         if (!target || target === document.body) {
             cell = findParentByClass(hit, "daily-timeline-cell") || findParentByClass(hit, "organization-schedule-cell");
             meta = cell && (cell._dailyMeta || cell._periodMeta);
-            scope = meta && JSON.stringify([state.viewMode === "monthly" ? "month" : util.formatDateKey(meta.day), meta.section, meta.team]);
+            scope = meta && JSON.stringify([getLayoutDateScope(meta.day, state.viewMode), meta.section, meta.team]);
             if (scope === drag.scope) {
                 candidates = document.querySelectorAll("#" + state.viewMode + "-view [data-layout-id]");
                 for (i = 0; i < candidates.length; i += 1) {
@@ -891,8 +927,10 @@
         size = Number(size);
         if ([12, 14, 16, 18, 20].indexOf(size) < 0) { size = 14; }
         currentFontSize = size;
-        document.body.style.fontFamily = fonts[family];
-        document.documentElement.style.fontSize = size + "px";
+        ["monthly-view", "weekly-view", "daily-view"].forEach(function (id) {
+            byId(id).style.fontFamily = fonts[family];
+            byId(id).style.fontSize = size + "px";
+        });
         byId("setting-font-family").value = family;
         byId("setting-font-size").value = String(size);
     }
@@ -953,6 +991,72 @@
         fontSettingsStatus("未保存の文字設定を表示しています。リストに保存してください。", false);
         renderCurrentView();
         updateFixedHeader();
+    }
+
+    function updateWeeklySettingsControls() {
+        var disabled = weeklySettingsBusy || !sharedWeeklySettings || service.isReadOnly();
+        byId("setting-weekly-show-time").disabled = disabled;
+        byId("setting-weekly-show-multi-day-line").disabled = disabled;
+        byId("save-weekly-settings").disabled = disabled;
+        byId("reload-weekly-settings").disabled = weeklySettingsBusy;
+    }
+
+    function weeklySettingsStatus(message, error) {
+        var element = byId("weekly-settings-status");
+        element.className = "settings-status" + (error ? " error" : "");
+        element.textContent = message;
+    }
+
+    function applyWeeklySettings(item) {
+        cancelLayoutDrag();
+        selectedLayoutScope = "";
+        weeklyDisplaySettings = {showTime: item.showTime, showMultiDayLine: item.showMultiDayLine};
+        byId("setting-weekly-show-time").checked = item.showTime;
+        byId("setting-weekly-show-multi-day-line").checked = item.showMultiDayLine;
+        if (state.viewMode === "weekly") { renderCurrentView(); updateFixedHeader(); }
+    }
+
+    function loadWeeklySettings(message) {
+        if (weeklySettingsBusy) { return; }
+        weeklySettingsBusy = true;
+        updateWeeklySettingsControls();
+        weeklySettingsStatus("SharePointから週間表示設定を読み込んでいます。", false);
+        displaySettingsSource.loadWeekly(function (item) {
+            sharedWeeklySettings = item;
+            applyWeeklySettings(item);
+            weeklySettingsBusy = false;
+            updateWeeklySettingsControls();
+            weeklySettingsStatus(message || "SharePointの共通設定を適用しました。変更するには「予定表更新」を押してください。", false);
+        }, function (error) {
+            sharedWeeklySettings = null;
+            weeklySettingsBusy = false;
+            byId("setting-weekly-show-time").checked = weeklyDisplaySettings.showTime;
+            byId("setting-weekly-show-multi-day-line").checked = weeklyDisplaySettings.showMultiDayLine;
+            updateWeeklySettingsControls();
+            weeklySettingsStatus((message ? message + " 再読込に失敗しました。 " : "") + error + " 現在の表示を維持します。", true);
+        });
+    }
+
+    function saveWeeklySettings() {
+        if (weeklySettingsBusy || !sharedWeeklySettings || service.isReadOnly()) { return; }
+        var values = {showTime: byId("setting-weekly-show-time").checked,
+            showMultiDayLine: byId("setting-weekly-show-multi-day-line").checked};
+        weeklySettingsBusy = true;
+        updateWeeklySettingsControls();
+        weeklySettingsStatus("SharePointに週間表示設定を保存しています。", false);
+        displaySettingsSource.saveWeekly(sharedWeeklySettings, values.showTime, values.showMultiDayLine, function () {
+            applyWeeklySettings(values);
+            sharedWeeklySettings = null;
+            weeklySettingsBusy = false;
+            loadWeeklySettings("週間表示設定をSharePointに保存しました。");
+        }, function (error) {
+            sharedWeeklySettings = null;
+            weeklySettingsBusy = false;
+            byId("setting-weekly-show-time").checked = weeklyDisplaySettings.showTime;
+            byId("setting-weekly-show-multi-day-line").checked = weeklyDisplaySettings.showMultiDayLine;
+            updateWeeklySettingsControls();
+            weeklySettingsStatus("保存できませんでした。表示は変更していません。再読込してからやり直してください。 " + error, true);
+        });
     }
 
     function initializeDisplayPreferences() {
@@ -1432,7 +1536,10 @@
         var endTime = formatDailyTime(endDate.getHours() * 60 + endDate.getMinutes());
         button.type = "button";
         button.className = "event-item period-event";
-        if (viewMode === "monthly") {
+        if (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine && !sameDate(item.startDate, endDate)) {
+            button.className += " period-multiday";
+        }
+        if (viewMode === "monthly" || (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine)) {
             if (!startHere) { button.className += " period-continues-before"; }
             if (!endHere) { button.className += " period-continues-after"; }
         }
@@ -1449,7 +1556,7 @@
         if (util.normalizeTextColor(item.textColor) !== "default") {
             times.className += " event-text-color-" + util.normalizeTextColor(item.textColor);
         }
-        if (!item.allDay && viewMode !== "monthly") {
+        if (!item.allDay && viewMode !== "monthly" && (viewMode !== "weekly" || weeklyDisplaySettings.showTime)) {
             times.appendChild(document.createTextNode(startHere && endHere ?
                 startTime + "–" + endTime : startHere ? startTime + "→" :
                 endHere ? "→" + endTime : "継続"));
@@ -1593,7 +1700,7 @@
         var row = document.createElement("tr");
         var nameCell = document.createElement("th");
         var scheduleCell = document.createElement("td");
-        row.className = "organization-section-row" + (collapsed ? " organization-collapsed" : "");
+        row.className = "organization-section-row organization-section-start" + (collapsed ? " organization-collapsed" : "");
         row.setAttribute("data-print-section", section.name);
         nameCell.className = "organization-name organization-section-name";
         appendOrganizationName(nameCell, section.name, collapsed, section.name, "", true);
@@ -1687,7 +1794,7 @@
                 result.push(dayItems[i]);
             }
         }
-        if (viewMode === "weekly" && result.length) {
+        if (viewMode === "weekly" && !weeklyDisplaySettings.showMultiDayLine && result.length) {
             var savedRows = getLayoutRows(result[0], day, viewMode);
             if (savedRows) {
                 var packed = layoutEngine.pack(result.map(function (item) { return {id: item.id, start: 0, end: 1}; }), savedRows);
@@ -1770,6 +1877,34 @@
             return {itemsByDate: aligned, requiredRows: packed.count, spans: spans};
         }
         return {itemsByDate: aligned, requiredRows: lanes.length, spans: spans};
+    }
+
+    function alignWeeklyItemsByLane(itemsByDate, savedRows) {
+        var unique = [], entries = [], aligned = [], spans = {}, i, j, item, first, last, packed;
+        for (j = 0; j < itemsByDate.length; j += 1) {
+            aligned[j] = [];
+            for (i = 0; i < itemsByDate[j].length; i += 1) {
+                item = itemsByDate[j][i];
+                if (item && unique.indexOf(item) < 0) { unique.push(item); }
+            }
+        }
+        unique.sort(compareItems);
+        for (i = 0; i < unique.length; i += 1) {
+            item = unique[i]; first = -1; last = -1;
+            for (j = 0; j < itemsByDate.length; j += 1) {
+                if (itemsByDate[j].indexOf(item) >= 0) { if (first < 0) { first = j; } last = j; }
+            }
+            entries.push({id: item.id, start: first, end: last + 1});
+            spans[String(item.id)] = {start: first, end: last + 1};
+        }
+        packed = layoutEngine.pack(entries, savedRows);
+        for (j = 0; j < itemsByDate.length; j += 1) {
+            for (i = 0; i < itemsByDate[j].length; i += 1) {
+                item = itemsByDate[j][i];
+                if (item) { aligned[j][packed.lanes[String(item.id)]] = item; }
+            }
+        }
+        return {itemsByDate: aligned, requiredRows: packed.count, spans: spans};
     }
 
     function createHeaderCell(text, className) {
@@ -1886,6 +2021,12 @@
                     itemsByDate = monthlyLayout.itemsByDate;
                     requiredRows = monthlyLayout.requiredRows;
                 }
+                if (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine && !collapsed) {
+                    monthlyLayout = alignWeeklyItemsByLane(itemsByDate,
+                        layoutReady && layoutRecord ? layoutRecord.orders[JSON.stringify(["week", block.section, block.team])] : null);
+                    itemsByDate = monthlyLayout.itemsByDate;
+                    requiredRows = monthlyLayout.requiredRows;
+                }
                 rowCount = collapsed ? 1 : getRenderedRowCount(block, requiredRows);
                 for (rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
                     row = document.createElement("tr");
@@ -1904,6 +2045,9 @@
                         row.className += " monthly-group-row" +
                             (rowIndex === 0 ? " monthly-group-first" : "") +
                             (rowIndex === rowCount - 1 ? " monthly-group-last" : "");
+                    }
+                    if (!section.hasTeams && blockIndex === 0 && rowIndex === 0) {
+                        addClass(row, "organization-section-start");
                     }
                     if (rowIndex === 0) {
                         groupCell = document.createElement("th");
@@ -1937,7 +2081,8 @@
                         if (item) {
                             scheduleCell.appendChild(decorateLayoutButton(createEventButton(item, date, viewMode,
                                 viewMode !== "monthly" || j === 0 || !itemOccursOn(item, dates[j - 1])), item, date, viewMode, rowIndex,
-                                viewMode === "monthly" ? monthlyLayout.spans[String(item.id)] : null));
+                                viewMode === "monthly" || (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine) ?
+                                    monthlyLayout.spans[String(item.id)] : null));
                         } else {
                             scheduleCell.appendChild(document.createTextNode("\u00a0"));
                         }
@@ -2399,8 +2544,9 @@
                 row.setAttribute("data-print-section", block.section);
                 row.setAttribute("data-print-team", block.team);
                 row.setAttribute("data-print-block", "1");
+                row.className = !section.hasTeams && blockIndex === 0 ? "organization-section-start" : "";
                 if (collapsed) {
-                    row.className = "organization-collapsed";
+                    addClass(row, "organization-collapsed");
                     groupCell = document.createElement("th");
                     groupCell.className = "organization-name daily-organization-name" +
                         (block.team ? " organization-team-name" : "");
@@ -2537,7 +2683,7 @@
 
     function updateWeeklyColumnWidths() {
         var columns = byId("weekly-columns").getElementsByTagName("col");
-        var tableWidth = byId("weekly-table").offsetWidth;
+        var tableWidth = byId("weekly-table").getBoundingClientRect().width / (currentDisplayZoom / 100);
         var weightTotal = 0;
         var dayWidth;
         var i;
@@ -2547,7 +2693,7 @@
         for (i = 0; i < 7; i += 1) {
             weightTotal += weeklyColumnWeights[i];
         }
-        dayWidth = Math.max(0, tableWidth - 155) / weightTotal;
+        dayWidth = Math.max(0, tableWidth - 1 - 155) / weightTotal;
         columns[0].style.width = "155px";
         for (i = 0; i < 7; i += 1) {
             columns[i + 1].style.width = (dayWidth * weeklyColumnWeights[i]) + "px";
@@ -2555,6 +2701,8 @@
     }
 
     function renderWeekly() {
+        byId("weekly-table").className = "schedule-list organization-schedule weekly-schedule" +
+            (weeklyDisplaySettings.showMultiDayLine ? " weekly-lines-enabled" : "");
         var firstDay = startOfWeek(state.displayDate);
         var lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + 6);
         var dates = [];
@@ -3696,6 +3844,13 @@
         util.addEvent(byId("setting-font-family"), "change", changeFontPreferences);
         util.addEvent(byId("save-font-settings"), "click", saveFontSettings);
         util.addEvent(byId("reload-font-settings"), "click", function () { loadFontSettings(); });
+        util.addEvent(byId("save-weekly-settings"), "click", saveWeeklySettings);
+        util.addEvent(byId("reload-weekly-settings"), "click", function () { loadWeeklySettings(); });
+        ["setting-weekly-show-time", "setting-weekly-show-multi-day-line"].forEach(function (id) {
+            util.addEvent(byId(id), "change", function () {
+                weeklySettingsStatus("未保存です。「週間表示設定をリストに保存」で表示に反映します。", false);
+            });
+        });
         util.addEvent(byId("setting-font-size"), "change", changeFontPreferences);
         util.addEvent(byId("reset-display-cookies"), "click", resetDisplayPreferences);
         util.addEvent(byId("print-view"), "click", function () {
@@ -3802,6 +3957,8 @@
         util.addEvent(window, "scroll", hideDailyContextMenu);
         util.addEvent(window, "scroll", updateFixedHeader);
         util.addEvent(byId("monthly-view"), "scroll", updateFixedHeader);
+        util.addEvent(byId("weekly-view"), "scroll", updateFixedHeader);
+        util.addEvent(byId("daily-view"), "scroll", updateFixedHeader);
         util.addEvent(window, "resize", function () {
             updateWeeklyColumnWidths();
             refreshFixedTimeAxis();
@@ -3877,6 +4034,7 @@
         settingsController.initialize();
         renderCurrentView();
         loadFontSettings();
+        loadWeeklySettings();
         holidays.initialize();
         reloadData("");
         checkSystemConnections();
@@ -3959,6 +4117,9 @@
         });
         log.observe(layoutSource, "save", target(layoutSource.client), 2, 3);
         log.observe(displaySettingsSource, "save", target(displaySettingsSource.client), 3, 4);
+        log.observe(displaySettingsSource, "loadWeekly", target(displaySettingsSource.client), 0, 1,
+            function () { return !displaySettingsSource.client.siteUrl; });
+        log.observe(displaySettingsSource, "saveWeekly", target(displaySettingsSource.client), 3, 4);
         log.observe(accessCounter, "increment", target(accessCounter.api), 0, 1, function () { return !accessCounter.api.siteUrl; });
         byId("recheck-connections").onclick = checkSystemConnections;
         byId("toggle-system-log").onclick = toggleLogSettings;
@@ -3973,7 +4134,7 @@
             {client: schedule, fields: [f.id, f.title, f.startDate, f.endDate, f.allDay, f.category, f.location, f.description, f.purpose]},
             {client: organizationSettingsSource.client, disabled: !organizationSettingsSource.enabled,
                 fields: [org.id, org.groupName, org.teamName, org.monthlyRows, org.weeklyRows, org.dailyRows, org.autoRows, org.sortOrder, org.isActive, org.calendarSiteUrl, org.calendarListTitle]},
-            {client: displaySettingsSource.client, fields: ["ID", "Title", "FontFamily", "FontSize"]},
+            {client: displaySettingsSource.client, fields: ["ID", "Title", "FontFamily", "FontSize", "SystemLogEnabled", "WeeklyShowTime", "WeeklyShowMultiDayLine"]},
             {client: layoutSource.client, fields: ["ID", "Title", "LayoutJson"]},
             {client: service.history.api, fields: ["ID", "Title", "Action", "ScheduleItemId", "ScheduleList", "BeforeJson", "AfterJson"]},
             {client: accessCounter.api, fields: ["ID", "Title", "VisitCount"]}

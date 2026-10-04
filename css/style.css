@@ -227,6 +227,7 @@ body.dark-mode .system-log-table .system-log-warning { background: #453c22; colo
 }
 
 .list-view {
+    overflow: auto;
     margin-top: 0;
     border: 1px solid #9aaaba;
     background: #fff;
@@ -288,7 +289,7 @@ body.dark-mode .system-log-table .system-log-warning { background: #453c22; colo
     padding: 5px 7px;
     border-left: 4px solid #176aa4;
     background: #eef6fb;
-    font-size: 1rem;
+    font-size: 1em;
 }
 
 .weekly-event:last-child {
@@ -305,7 +306,7 @@ body.dark-mode .system-log-table .system-log-warning { background: #453c22; colo
     border: 0;
     background: transparent;
     color: #174f7c;
-    font-size: 1rem;
+    font-size: 1em;
     font-weight: bold;
     text-align: left;
     cursor: pointer;
@@ -319,7 +320,7 @@ body.dark-mode .system-log-table .system-log-warning { background: #453c22; colo
 .event-meta {
     margin-left: 10px;
     color: #555;
-    font-size: 1rem;
+    font-size: 1em;
 }
 
 .empty-schedule {
@@ -468,12 +469,11 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     z-index: 1050;
     display: none;
     overflow: hidden;
-    border: 1px solid #9aaaba;
     background: #fff;
     pointer-events: none;
 }
 
-.fixed-daily-axis table { margin: -1px 0 0 -1px; }
+.fixed-daily-axis table { margin: 0; }
 
 .edit-mode-status,
 .access-counter {
@@ -511,9 +511,9 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     z-index: 1;
     top: 8px;
     color: #333;
-    font-size: 0.85714286rem;
+    font-size: 0.85714286em;
     font-weight: bold;
-    line-height: 1rem;
+    line-height: 1.16666667em;
     white-space: nowrap;
     transform: translateX(-50%);
 }
@@ -552,6 +552,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 }
 
 .daily-event-bar {
+    font-size: inherit;
     position: absolute;
     z-index: 1;
     height: 39px;
@@ -648,10 +649,10 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .daily-event-times {
     position: relative;
     display: block;
-    height: 1rem;
-    font-size: 0.85714286rem;
+    height: 1.16666667em;
+    font-size: 0.85714286em;
     font-weight: bold;
-    line-height: 1rem;
+    line-height: 1.16666667em;
 }
 
 .daily-event-start,
@@ -723,9 +724,9 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     overflow: visible;
     box-sizing: border-box;
     color: #173e5d;
-    font-size: 0.85714286rem;
+    font-size: 0.85714286em;
     font-weight: bold;
-    line-height: 1rem;
+    line-height: 1.16666667em;
     text-align: center;
     text-overflow: clip;
     white-space: nowrap;
@@ -759,7 +760,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     width: 100%;
     margin: 0 0 4px;
     padding: 4px 5px;
-    font-size: 1rem;
+    font-size: 1em;
     overflow: visible;
     border: 1px solid #7fa7c5;
     background: #e8f3fb;
@@ -804,11 +805,12 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .organization-schedule td {
     height: 14px;
     padding: 0;
-    line-height: 1rem;
+    line-height: 1em;
     vertical-align: middle;
 }
 
 .organization-schedule thead th {
+    font-size: 1rem;
     height: 30px;
     padding: 2px;
     line-height: 1.2;
@@ -861,9 +863,9 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     background: #fff;
     color: #174f7c;
     font-family: inherit;
-    font-size: 1rem;
+    font-size: 1em;
     font-weight: bold;
-    line-height: 1rem;
+    line-height: 1em;
     vertical-align: middle;
     cursor: pointer;
 }
@@ -941,6 +943,11 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     color: #173e5d;
 }
 
+.organization-schedule tbody tr.organization-section-start > th,
+.organization-schedule tbody tr.organization-section-start > td {
+    border-top: 3px solid #8ba0b2;
+}
+
 .organization-schedule .organization-team-name {
     padding-left: 18px;
 }
@@ -968,7 +975,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     padding: 1px 2px;
     border: 0;
     border-radius: 0;
-    line-height: 1rem;
+    line-height: 1em;
     white-space: normal;
 }
 
@@ -989,9 +996,60 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 .period-event-times {
     display: block;
     min-height: 12px;
-    font-size: 0.78571429rem;
+    font-size: 0.78571429em;
     font-weight: bold;
-    line-height: 0.85714286rem;
+    line-height: 1.09090909em;
+}
+
+.weekly-display-settings label {
+    display: block;
+    margin-top: 10px;
+}
+
+.weekly-schedule.weekly-lines-enabled .organization-schedule-cell {
+    overflow: visible;
+    vertical-align: top;
+}
+
+.weekly-schedule.weekly-lines-enabled .event-item.period-event {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.weekly-schedule.weekly-lines-enabled .period-event-times {
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.weekly-schedule.weekly-lines-enabled .period-event-times,
+.weekly-schedule.weekly-lines-enabled .period-event-caption {
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.weekly-schedule .period-event.period-multiday .daily-event-line {
+    display: block;
+    width: calc(100% - 8px);
+    margin: 3px 4px;
+}
+
+.weekly-schedule .period-multiday.period-continues-after .daily-event-line {
+    width: calc(100% - 2px);
+    margin-left: 4px;
+}
+
+.weekly-schedule .period-multiday.period-continues-before .daily-event-line {
+    width: calc(100% - 2px);
+    margin-left: -2px;
+}
+
+.weekly-schedule .period-multiday.period-continues-before.period-continues-after .daily-event-line {
+    width: calc(100% + 4px);
+}
+
+.weekly-schedule .period-continues-before .daily-event-line:before,
+.weekly-schedule .period-continues-after .daily-event-line:after {
+    display: none;
 }
 
 .period-event .daily-event-line {
@@ -1047,7 +1105,7 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
 
 .period-event-caption {
     display: block;
-    font-size: 0.85714286rem;
+    font-size: 0.85714286em;
     font-weight: bold;
     line-height: 1.25;
 }
@@ -1382,6 +1440,10 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     border: 1px solid #9aaaba;
 }
 
+.group-settings .settings-table-wrap {
+    max-height: 38vh;
+}
+
 .settings-table {
     width: 100%;
     border-collapse: collapse;
@@ -1646,6 +1708,11 @@ body.dark-mode .organization-section-row .organization-section-cell {
 
 body.dark-mode .organization-section-row .organization-section-name {
     color: #dce9f3;
+}
+
+body.dark-mode .organization-schedule tbody tr.organization-section-start > th,
+body.dark-mode .organization-schedule tbody tr.organization-section-start > td {
+    border-top-color: #657587;
 }
 
 body.dark-mode .organization-collapsed-cell {
@@ -2050,7 +2117,7 @@ body.dark-mode .settings-table td {
     background: rgba(225, 240, 255, 0.85);
     color: #164878;
     overflow: hidden;
-    font-size: 0.85714286rem;
+    font-size: 0.85714286em;
 }
 .layout-drop-indicator {
     position: absolute;

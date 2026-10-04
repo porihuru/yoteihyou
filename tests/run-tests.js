@@ -769,7 +769,7 @@ test("日々の件名背景は文字部分だけにして空白の縦罫線を�
     assert.ok(app.indexOf('findParentByClass(source, "daily-event-caption")') >= 0);
 });
 
-test("週間のグループ内横罫線と予定内の横線を表示しない", function () {
+test("週間のグループ内横罫線と、設定未取得時の予定内の横線を表示しない", function () {
     var css = fs.readFileSync(path.join(root, "css/style.css"), "utf8");
     var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     assert.ok(app.indexOf('row.className += " weekly-group-row"') >= 0);
@@ -971,13 +971,15 @@ test("週間の土日見出しを色分けし予定のない土日だけ半幅�
     var columns = Array.from({length: 8}, function () { return {style: {}}; });
     var elements = {
         "weekly-columns": {getElementsByTagName: function () { return columns; }},
-        "weekly-table": {offsetWidth: 1400},
+        "weekly-table": {offsetWidth: 1400, getBoundingClientRect: function () { return {width: this.offsetWidth}; }},
         "month-title": {}, "print-heading": {}, "weekly-head": {}, "weekly-body": {}
     };
     var weekendItems = {};
     var scope = vm.createContext({
         state: {displayDate: new Date(2026, 8, 24)},
         weeklyColumnWeights: [],
+        weeklyDisplaySettings: {showTime: true, showMultiDayLine: false},
+        currentDisplayZoom: 100,
         startOfWeek: function () { return new Date(2026, 8, 21); },
         byId: function (id) { return elements[id]; },
         getItemsForDay: function (date, viewMode) {
@@ -1342,6 +1344,7 @@ test("週間・月間の予定に開始終了時刻と横線の設定を保持�
     var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var scope = vm.createContext({
         util: util,
+        weeklyDisplaySettings: {showTime: true, showMultiDayLine: false},
         dailyInteraction: {selectedItemId: "", clipboard: null},
         sameDate: function (left, right) {
             return left.getFullYear() === right.getFullYear() &&
@@ -1383,6 +1386,27 @@ test("週間・月間の予定に開始終了時刻と横線の設定を保持�
     button = scope.createEventButton(item, day);
     assert.strictEqual(button.children[0].className.indexOf("daily-event-line") >= 0, true);
     assert.strictEqual(button.children.length, 2);
+    [true, false].forEach(function (showTime) { [true, false].forEach(function (showLine) {
+        scope.weeklyDisplaySettings = {showTime: showTime, showMultiDayLine: showLine};
+        [true, false].forEach(function (allDay) { [true, false].forEach(function (multiDay) {
+            item.allDay = allDay;
+            item.endDate = new Date(2026, 8, multiDay ? 26 : 24, 10, 45);
+            button = scope.createEventButton(item, day, "weekly");
+            assert.strictEqual(button.children.some(function (child) {
+                return child.className.indexOf("period-event-times") >= 0;
+            }), showTime && !allDay);
+            assert.strictEqual(button.className.indexOf("period-multiday") >= 0, showLine && multiDay);
+        }); });
+        item.allDay = false;
+        item.endDate = new Date(2026, 8, 26, 10, 45);
+        button = scope.createEventButton(item, new Date(2026, 8, 25), "weekly");
+        assert.strictEqual(button.className.indexOf("period-continues-before") >= 0, showLine);
+        assert.strictEqual(button.className.indexOf("period-continues-after") >= 0, showLine);
+        button = scope.createEventButton(item, day, "monthly");
+        assert.strictEqual(button.children.length, 2);
+        button = scope.createEventButton(item, day, "daily");
+        assert.strictEqual(button.children.length, 3);
+    }); });
 });
 
 test("日々予定にドラッグ操作とコピー操作のUIがある", function () {
@@ -1466,7 +1490,8 @@ test("試験用CSVは平日に全グループを収録しGP1に複数日予定�
 
 test("文字設定を検証して適用し、旧Cookieの文字設定を使用しない", function () {
     var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
-    var fields = {"setting-font-family": {}, "setting-font-size": {}};
+    var fields = {"setting-font-family": {}, "setting-font-size": {},
+        "monthly-view": {style: {}}, "weekly-view": {style: {}}, "daily-view": {style: {}}};
     var saved = {fontFamily: "mincho", fontSize: "20"};
     var scope = vm.createContext({
         document: {body: {style: {}}, documentElement: {style: {}}},
@@ -1483,8 +1508,12 @@ test("文字設定を検証して適用し、旧Cookieの文字設定を使用�
         source.indexOf("    function removeClass(")), scope);
     scope.setFontPreferences("mincho", "20", true);
     assert.strictEqual(scope.currentFontSize, 20);
-    assert.strictEqual(scope.document.documentElement.style.fontSize, "20px");
-    assert.ok(scope.document.body.style.fontFamily.indexOf("MS Mincho") >= 0);
+    assert.strictEqual(scope.document.documentElement.style.fontSize, undefined);
+    assert.strictEqual(scope.document.body.style.fontFamily, undefined);
+    ["monthly-view", "weekly-view", "daily-view"].forEach(function (id) {
+        assert.strictEqual(fields[id].style.fontSize, "20px");
+        assert.ok(fields[id].style.fontFamily.indexOf("MS Mincho") >= 0);
+    });
     scope.setFontPreferences("default", 14, false);
     scope.initializeDisplayPreferences();
     assert.strictEqual(fields["setting-font-family"].value, "default");
@@ -1492,6 +1521,36 @@ test("文字設定を検証して適用し、旧Cookieの文字設定を使用�
     scope.setFontPreferences("__proto__", "999", false);
     assert.strictEqual(scope.currentFontSize, 14);
     assert.strictEqual(fields["setting-font-family"].value, "default");
+});
+
+test("固定見出しは拡大率と小数の列幅を保持し、スクロールバーによる幅変更に追従する", function () {
+    var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    [70, 90, 100, 110, 150].forEach(function (zoom) {
+        var scale = zoom / 100, width = 1000.375;
+        var widths = [155.25, 281.125, 282.375, 280.625];
+        var copies = widths.map(function () { return {style: {}}; });
+        var cells = widths.map(function (value) { return {getBoundingClientRect: function () { return {width: value * scale}; }}; });
+        var head = {getElementsByTagName: function () { return cells; }};
+        var table = {getBoundingClientRect: function () { return {width: width * scale}; },
+            getElementsByTagName: function () { return [head]; }};
+        var view = {style: {fontSize: "20px", fontFamily: "Meiryo"}, getElementsByTagName: function () { return [table]; }};
+        var copy = {style: {}, getElementsByTagName: function () { return copies; }};
+        var overlay = {style: {}, firstChild: copy};
+        var scope = vm.createContext({fixedHeader: {axisOverlay: overlay}, currentDisplayZoom: zoom,
+            state: {viewMode: "weekly"}, byId: function () { return view; }});
+        vm.runInContext(source.slice(source.indexOf("    function syncFixedTimeAxis("),
+            source.indexOf("    function updateFixedHeader(")), scope);
+        scope.syncFixedTimeAxis();
+        assert.ok(Math.abs(parseFloat(copy.style.width) - width) < 0.00001);
+        copies.forEach(function (cell, index) {
+            assert.ok(Math.abs(parseFloat(cell.style.width) - widths[index]) < 0.00001);
+        });
+        assert.strictEqual(overlay.style.fontSize, "20px");
+        assert.strictEqual(overlay.style.fontFamily, "Meiryo");
+        width -= 17;
+        scope.syncFixedTimeAxis();
+        assert.ok(Math.abs(parseFloat(copy.style.width) - width) < 0.00001);
+    });
 });
 
 test("文字を大きくすると日々予定の行高も広がる", function () {
@@ -1874,6 +1933,7 @@ test("空白や段の隙間へのドラッグでも近い段を選び、表示�
     }
     var target = button("target", 200), moved = button("moved", 241), indicator, saved;
     var scope = vm.createContext({util: util, layoutEngine: layout, state: {viewMode: "daily"},
+        getLayoutDateScope: function (date) { return util.formatDateKey(date); },
         layoutDrag: {item: {id: "moved"}, scope: key, startX: 300, startY: 255, moved: false,
             entries: [{id: "target", start: 0, end: 1}, {id: "moved", start: 0, end: 1}], positions: {target: 0, moved: 1}},
         findParentByClass: function (element, className) { return element === cell && className === "daily-timeline-cell" ? cell : null; },
@@ -1936,7 +1996,7 @@ test("共有設定は旧形式を読み、新形式を保存・再読込でき�
 test("週間の指定段の途中が空でも、後の予定を上へ詰めない", function () {
     var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var a = {id: "a"}, b = {id: "b"};
-    var scope = vm.createContext({layoutEngine: layout,
+    var scope = vm.createContext({layoutEngine: layout, weeklyDisplaySettings: {showMultiDayLine: false},
         getItemsForDay: function () { return [a, b]; },
         splitPurpose: function () { return {section: "G", team: ""}; },
         getLayoutRows: function () { return {version: 2, positions: {a: 0, b: 2}}; }});
@@ -2020,6 +2080,113 @@ test("上下入れ替え中は予定本体・文字・端をドラッグして�
     scope.decorateLayoutButton(normal, {id: "a"}, new Date(), "weekly", 0);
     normal.onmousedown({});
     assert.strictEqual(moves, 1);
+});
+
+test("週間表示設定の4通りを対象列だけにETag付きで保存し、不正値と競合を拒否する", function () {
+    var browser = loadBrowserScripts(["js/util.js", "js/sharepoint-data-source.js", "js/display-settings-data-source.js"]);
+    var source = new browser.window.YoteihyouDisplaySettingsDataSource({siteUrl: "https://example.invalid/sites/test"});
+    var rows, loaded, writes = 0, failures = 0;
+    function fail(message) { throw new Error(message); }
+    source.client.getEntityType = function (done) { done("Settings"); };
+    source.client.getDigest = function (done) { done("digest"); };
+    source.client.request = function (method, url, headers, body, done) {
+        if (method === "GET") {
+            assert.ok(url.indexOf("$select=ID,WeeklyShowTime,WeeklyShowMultiDayLine") >= 0);
+            assert.ok(decodeURIComponent(url).indexOf("Title eq 'default'") >= 0);
+            done({responseText: JSON.stringify({d: {results: rows}})});
+        } else {
+            writes += 1;
+            var payload = JSON.parse(body);
+            assert.deepStrictEqual(Object.keys(payload).sort(), ["WeeklyShowMultiDayLine", "WeeklyShowTime", "__metadata"]);
+            assert.strictEqual(headers["IF-MATCH"], "3");
+            assert.strictEqual(headers["X-HTTP-Method"], "MERGE");
+            assert.strictEqual(payload.WeeklyShowTime, loaded.showTime);
+            assert.strictEqual(payload.WeeklyShowMultiDayLine, loaded.showMultiDayLine);
+            done();
+        }
+    };
+    [true, false].forEach(function (time) { [true, false].forEach(function (line) {
+        rows = [{ID: 8, WeeklyShowTime: time, WeeklyShowMultiDayLine: line, __metadata: {etag: "3"}}];
+        source.loadWeekly(function (item) { loaded = item; }, fail);
+        assert.strictEqual(loaded.showTime, time);
+        assert.strictEqual(loaded.showMultiDayLine, line);
+        source.saveWeekly(loaded, time, line, function () {}, fail);
+    }); });
+    assert.strictEqual(writes, 4);
+    function unexpected() { throw new Error("不正な設定を成功扱いにしました"); }
+    function rejected() { failures += 1; }
+    [[], [{ID: 8}], [{ID: 8}, {ID: 9}],
+        [{ID: 8, WeeklyShowTime: "false", WeeklyShowMultiDayLine: true, __metadata: {etag: "3"}}],
+        [{ID: 8, WeeklyShowTime: true, WeeklyShowMultiDayLine: false}]].forEach(function (value) {
+        rows = value; source.loadWeekly(unexpected, rejected);
+    });
+    source.saveWeekly({id: 8}, true, true, unexpected, rejected);
+    source.saveWeekly(loaded, "false", true, unexpected, rejected);
+    [403, 412].forEach(function (status) {
+        source.client.request = function (method, url, headers, body, done, error) { error(String(status)); };
+        source.saveWeekly(loaded, false, true, unexpected, rejected);
+    });
+    assert.strictEqual(failures, 9);
+    assert.strictEqual(writes, 4);
+});
+
+test("週間表示は保存成功後だけ反映し、読取専用・連打・失敗では現状を保つ", function () {
+    var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8"), controls = {}, loadDone, loadFail, saveDone, saveFail;
+    var writes = 0, renders = 0, readOnly = false;
+    ["setting-weekly-show-time", "setting-weekly-show-multi-day-line", "save-weekly-settings",
+        "reload-weekly-settings", "weekly-settings-status"].forEach(function (id) { controls[id] = {}; });
+    var scope = vm.createContext({sharedWeeklySettings: null, weeklySettingsBusy: false,
+        weeklyDisplaySettings: {showTime: true, showMultiDayLine: false}, state: {viewMode: "weekly"},
+        byId: function (id) { return controls[id]; }, cancelLayoutDrag: function () {},
+        renderCurrentView: function () { renders += 1; }, updateFixedHeader: function () {},
+        service: {isReadOnly: function () { return readOnly; }}, displaySettingsSource: {
+            loadWeekly: function (done, fail) { loadDone = done; loadFail = fail; },
+            saveWeekly: function (item, time, line, done, fail) { writes += 1; saveDone = done; saveFail = fail; }
+        }});
+    vm.runInContext(app.slice(app.indexOf("    function updateWeeklySettingsControls("),
+        app.indexOf("    function initializeDisplayPreferences(")), scope);
+    scope.loadWeeklySettings(); loadDone({id: 8, etag: "1", showTime: true, showMultiDayLine: false});
+    controls["setting-weekly-show-time"].checked = false;
+    controls["setting-weekly-show-multi-day-line"].checked = true;
+    readOnly = true; scope.saveWeeklySettings(); assert.strictEqual(writes, 0);
+    readOnly = false; scope.saveWeeklySettings(); scope.saveWeeklySettings(); assert.strictEqual(writes, 1);
+    assert.strictEqual(scope.weeklyDisplaySettings.showTime, true);
+    saveFail("412"); assert.strictEqual(scope.weeklyDisplaySettings.showMultiDayLine, false);
+    assert.strictEqual(controls["save-weekly-settings"].disabled, true);
+    scope.loadWeeklySettings(); loadDone({id: 8, etag: "2", showTime: true, showMultiDayLine: false});
+    controls["setting-weekly-show-time"].checked = false;
+    controls["setting-weekly-show-multi-day-line"].checked = true;
+    scope.saveWeeklySettings(); saveDone();
+    assert.strictEqual(scope.weeklyDisplaySettings.showTime, false);
+    assert.strictEqual(scope.weeklyDisplaySettings.showMultiDayLine, true);
+    loadFail("接続失敗"); assert.strictEqual(scope.weeklyDisplaySettings.showMultiDayLine, true);
+    var before = renders;
+    scope.state.viewMode = "monthly";
+    scope.loadWeeklySettings(); loadDone({id: 8, etag: "3", showTime: true, showMultiDayLine: false});
+    assert.strictEqual(renders, before);
+});
+
+test("週間の日またぎ予定は同じ行に揃い、重複を避けて週単位で配置を保存できる", function () {
+    var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    var a = {id: "a"}, b = {id: "b"}, c = {id: "c"};
+    var scope = vm.createContext({layoutEngine: layout, compareItems: function (a, b) { return a.id.localeCompare(b.id); },
+        weeklyDisplaySettings: {showMultiDayLine: true}, util: util,
+        splitPurpose: function () { return {section: "GP1", team: ""}; }});
+    vm.runInContext(app.slice(app.indexOf("    function alignWeeklyItemsByLane("), app.indexOf("    function createHeaderCell(")), scope);
+    vm.runInContext(app.slice(app.indexOf("    function getLayoutScope("), app.indexOf("    function getLayoutRows(")), scope);
+    var days = [[a, b], [b, c], [b]], result = scope.alignWeeklyItemsByLane(days, null);
+    var lane = result.itemsByDate[0].indexOf(b);
+    assert.strictEqual(result.itemsByDate[1][lane], b);
+    assert.strictEqual(result.itemsByDate[2][lane], b);
+    assert.strictEqual(result.requiredRows, 2);
+    assert.strictEqual(result.spans.b.start, 0); assert.strictEqual(result.spans.b.end, 3);
+    result = scope.alignWeeklyItemsByLane(days, {version: 2, positions: {b: 3}});
+    assert.strictEqual(result.requiredRows, 4);
+    result.itemsByDate.forEach(function (items) { assert.strictEqual(items[3], b); });
+    var first = new Date(2026, 9, 5), next = new Date(2026, 9, 6);
+    assert.strictEqual(scope.getLayoutScope(a, first, "weekly"), scope.getLayoutScope(a, next, "weekly"));
+    scope.weeklyDisplaySettings.showMultiDayLine = false;
+    assert.notStrictEqual(scope.getLayoutScope(a, first, "weekly"), scope.getLayoutScope(a, next, "weekly"));
 });
 
 function makeLogFixture(storage) {

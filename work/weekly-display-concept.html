@@ -1,0 +1,105 @@
+<div id="weekly-display-concept" class="viz-dotted-background">
+  <style>
+    #weekly-display-concept { padding: 16px 0; color-scheme: light dark; }
+    #weekly-display-concept .schedule-concept {
+      --schedule-bg: light-dark(#ffffff, #202830);
+      --schedule-text: light-dark(#243444, #e4edf6);
+      --schedule-panel: light-dark(#f0f4f7, #303b47);
+      --schedule-border: light-dark(#a7b5c2, #576777);
+      --schedule-blue: light-dark(#126da2, #81cfff);
+      background: var(--schedule-bg); color: var(--schedule-text);
+      border: 1px solid var(--schedule-border); border-radius: 6px;
+      font-family: "Yu Gothic UI", Meiryo, sans-serif; font-size: 14px;
+      padding: 18px;
+    }
+    #weekly-display-concept h3 { font-size: 16px; font-weight: 500; margin: 0 90px 18px 0; }
+    #weekly-display-concept fieldset { min-width: 0; margin: 0; padding: 10px 12px; border: 1px solid var(--schedule-border); border-radius: 4px; }
+    #weekly-display-concept legend { font-weight: 500; padding: 0 6px; }
+    #weekly-display-concept .setting-row { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+    #weekly-display-concept input { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--schedule-blue); }
+    #weekly-display-concept .setting-state { margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #weekly-display-concept .preview-heading { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin: 20px 0 10px; font-weight: 500; }
+    #weekly-display-concept .week-grid { display: grid; grid-template-columns: 44px repeat(3, minmax(0, 1fr)); border: 1px solid var(--schedule-border); }
+    #weekly-display-concept .day { background: var(--schedule-panel); padding: 8px 2px; text-align: center; border-bottom: 1px solid var(--schedule-border); font-size: 14px; }
+    #weekly-display-concept .day + .day { border-left: 1px solid var(--schedule-border); }
+    #weekly-display-concept .group-name { padding: 12px 3px; background: var(--schedule-panel); border-right: 1px solid var(--schedule-border); font-weight: 500; }
+    #weekly-display-concept .events { grid-column: 2 / 5; position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 12px 0; gap: 20px 0; }
+    #weekly-display-concept .column-line { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--schedule-border); pointer-events: none; }
+    #weekly-display-concept .column-line.first { left: 33.333333%; }
+    #weekly-display-concept .column-line.second { left: 66.666667%; }
+    #weekly-display-concept .meeting { grid-column: 1; padding: 0 5px; overflow-wrap: anywhere; }
+    #weekly-display-concept .time { display: block; font-size: 12px; font-variant-numeric: tabular-nums; margin-bottom: 3px; }
+    #weekly-display-concept .multi-day { grid-column: 1 / 4; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); position: relative; padding-top: 10px; }
+    #weekly-display-concept .period-line { position: absolute; top: 0; left: 6px; right: 6px; height: 6px; border-top: 2px solid var(--schedule-blue); border-left: 2px solid var(--schedule-blue); border-right: 2px solid var(--schedule-blue); }
+    #weekly-display-concept .period-day { padding: 0 5px; overflow-wrap: anywhere; }
+    #weekly-display-concept [hidden] { display: none !important; }
+    #weekly-display-concept .preview-status { margin: 12px 0 0; font-size: 12px; }
+    @media (max-width: 420px) { #weekly-display-concept .schedule-concept { padding: 12px 8px; } #weekly-display-concept fieldset { padding: 6px; } }
+  </style>
+  <section class="schedule-concept" aria-label="週間予定表の設定案">
+    <h3>設定の構想</h3>
+    <fieldset>
+      <legend>週間予定表の表示</legend>
+      <label class="setting-row cursor-interaction">
+        <input id="weekly-concept-time" type="checkbox" checked>
+        <span>時刻を表示する</span>
+        <span class="setting-state" id="weekly-concept-time-state">オン</span>
+      </label>
+      <label class="setting-row cursor-interaction">
+        <input id="weekly-concept-line" type="checkbox" checked>
+        <span>日をまたぐ予定に横線を表示する</span>
+        <span class="setting-state" id="weekly-concept-line-state">オン</span>
+      </label>
+    </fieldset>
+    <div class="preview-heading"><span>週間の表示例</span><span>2026年10月（一部）</span></div>
+    <div class="week-grid" role="img" aria-label="10月5日から7日の週間予定表。5日の定例会と、5日から7日までの設備点検。">
+      <div class="day">GP</div><div class="day">5（月）</div><div class="day">6（火）</div><div class="day">7（水）</div>
+      <div class="group-name">GP1</div>
+      <div class="events">
+        <div class="column-line first"></div><div class="column-line second"></div>
+        <div class="meeting"><span class="time" data-time>09:00–10:00</span>定例会</div>
+        <div class="multi-day">
+          <div class="period-line" id="weekly-concept-period-line" aria-hidden="true"></div>
+          <div class="period-day"><span class="time" data-time>13:00開始</span>設備点検</div>
+          <div class="period-day">設備点検</div>
+          <div class="period-day"><span class="time" data-time>17:00終了</span>設備点検</div>
+        </div>
+      </div>
+    </div>
+    <div class="preview-status" id="weekly-concept-status" aria-live="polite">時刻：オン ／ 日をまたぐ予定の横線：オン</div>
+  </section>
+  <script>
+    (function () {
+      const root = document.getElementById('weekly-display-concept');
+      const time = root.querySelector('#weekly-concept-time');
+      const line = root.querySelector('#weekly-concept-line');
+      function update() {
+        root.querySelectorAll('[data-time]').forEach(function (item) { item.hidden = !time.checked; });
+        root.querySelector('#weekly-concept-period-line').hidden = !line.checked;
+        root.querySelector('#weekly-concept-time-state').textContent = time.checked ? 'オン' : 'オフ';
+        root.querySelector('#weekly-concept-line-state').textContent = line.checked ? 'オン' : 'オフ';
+        root.querySelector('#weekly-concept-status').textContent = '時刻：' + (time.checked ? 'オン' : 'オフ') + ' ／ 日をまたぐ予定の横線：' + (line.checked ? 'オン' : 'オフ');
+      }
+      function restore(saved) {
+        const state = saved && saved.modelContent;
+        if (!state || state.concept !== 'weekly-display') return;
+        if (typeof state.showTime === 'boolean') time.checked = state.showTime;
+        if (typeof state.showMultiDayLine === 'boolean') line.checked = state.showMultiDayLine;
+        update();
+      }
+      function change() {
+        update();
+        if (window.openai && window.openai.setWidgetState) {
+          window.openai.setWidgetState({ modelContent: { concept: 'weekly-display', showTime: time.checked, showMultiDayLine: line.checked }, privateContent: null }).catch(function () {});
+        }
+      }
+      time.addEventListener('change', change);
+      line.addEventListener('change', change);
+      restore(window.openai && window.openai.widgetState);
+      window.addEventListener('openai:set_globals', function (event) {
+        const globals = event.detail && event.detail.globals;
+        if (globals && Object.prototype.hasOwnProperty.call(globals, 'widgetState')) restore(globals.widgetState);
+      });
+    }());
+  </script>
+</div>
