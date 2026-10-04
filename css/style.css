@@ -473,7 +473,26 @@ body.dark-mode .print-preview-content .daily-event-line.line-dotted {
     pointer-events: none;
 }
 
-.fixed-daily-axis table { margin: 0; }
+.fixed-header-backdrop {
+    display: none;
+    position: fixed;
+    top: 0;
+    z-index: 1049;
+    background: #fff;
+    pointer-events: none;
+}
+body.dark-mode .fixed-header-backdrop { background: #1c2a38; }
+
+/* Measured border boxes, not a second independent table layout. */
+.fixed-daily-axis table { margin: 0; position: relative; display: block; border: 0; }
+.fixed-daily-axis thead, .fixed-daily-axis tr { display: block; }
+.fixed-daily-axis th {
+    position: absolute;
+    display: block;
+    min-width: 0;
+    max-width: none;
+    overflow: hidden;
+}
 
 .edit-mode-status,
 .access-counter {

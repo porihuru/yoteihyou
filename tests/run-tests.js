@@ -1529,9 +1529,12 @@ test("固定見出しは拡大率と小数の列幅を保持し、スクロー�
         var scale = zoom / 100, width = 1000.375;
         var widths = [155.25, 281.125, 282.375, 280.625];
         var copies = widths.map(function () { return {style: {}}; });
-        var cells = widths.map(function (value) { return {getBoundingClientRect: function () { return {width: value * scale}; }}; });
-        var head = {getElementsByTagName: function () { return cells; }};
-        var table = {getBoundingClientRect: function () { return {width: width * scale}; },
+        var cells = widths.map(function (value, index) { return {getBoundingClientRect: function () {
+            var left = widths.slice(0, index).reduce(function (sum, w) { return sum + w; }, 0);
+            return {left: left * scale, top: 0, height: 30 * scale, width: value * scale};
+        }}; });
+        var head = {getBoundingClientRect: function () { return {top: 0, height: 30 * scale}; }, getElementsByTagName: function () { return cells; }};
+        var table = {getBoundingClientRect: function () { return {left: 0, width: width * scale}; },
             getElementsByTagName: function () { return [head]; }};
         var view = {style: {fontSize: "20px", fontFamily: "Meiryo"}, getElementsByTagName: function () { return [table]; }};
         var copy = {style: {}, getElementsByTagName: function () { return copies; }};

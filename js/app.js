@@ -164,6 +164,9 @@
         fixedHeader.headerPlaceholder = document.createElement("div");
         fixedHeader.toolbarPlaceholder = document.createElement("div");
         fixedHeader.axisOverlay = document.createElement("div");
+        fixedHeader.backdrop = document.createElement("div");
+        fixedHeader.backdrop.className = "fixed-header-backdrop screen-only";
+        document.body.appendChild(fixedHeader.backdrop);
         fixedHeader.headerPlaceholder.className = "fixed-header-placeholder screen-only";
         fixedHeader.toolbarPlaceholder.className = "fixed-header-placeholder screen-only";
         fixedHeader.axisOverlay.className = "fixed-daily-axis screen-only";
@@ -202,6 +205,7 @@
         fixedHeader.toolbarPlaceholder.style.height = "0";
         fixedHeader.toolbarPlaceholder.style.marginTop = "0";
         fixedHeader.axisOverlay.style.display = "none";
+        fixedHeader.backdrop.style.display = "none";
         fixedHeader.active = false;
     }
 
@@ -220,6 +224,8 @@
         copy.className = sourceTable.className;
         copy.style.minWidth = "0";
         copy.appendChild(source.cloneNode(true));
+        copy.firstChild.removeAttribute("id");
+        copy.setAttribute("aria-hidden", "true");
         overlay.appendChild(copy);
         syncFixedTimeAxis();
     }
@@ -231,16 +237,25 @@
         var source = sourceTable.getElementsByTagName("thead")[0];
         var copy = overlay && overlay.firstChild;
         var scale = currentDisplayZoom / 100;
-        var cells, sourceCells, i;
+        var cells, sourceCells, i, tableRect, headRect, cellRect;
         if (!copy || !source) { return; }
         overlay.style.fontSize = view.style.fontSize;
         overlay.style.fontFamily = view.style.fontFamily;
-        copy.style.width = sourceTable.getBoundingClientRect().width / scale + "px";
+        tableRect = sourceTable.getBoundingClientRect();
+        headRect = source.getBoundingClientRect();
+        copy.style.width = tableRect.width / scale + "px";
+        copy.style.height = headRect.height / scale + "px";
         cells = copy.getElementsByTagName("th");
         sourceCells = source.getElementsByTagName("th");
         if (cells.length === sourceCells.length) {
             for (i = 0; i < cells.length; i += 1) {
-                cells[i].style.width = sourceCells[i].getBoundingClientRect().width / scale + "px";
+                // A second table layout can redistribute widths (especially in IE11).
+                // Position each copy at the original cell's measured border box instead.
+                cellRect = sourceCells[i].getBoundingClientRect();
+                cells[i].style.left = (cellRect.left - tableRect.left) / scale + "px";
+                cells[i].style.top = (cellRect.top - headRect.top) / scale + "px";
+                cells[i].style.width = cellRect.width / scale + "px";
+                cells[i].style.height = cellRect.height / scale + "px";
             }
         }
     }
@@ -294,6 +309,10 @@
         toolbarHeight = toolbar.getBoundingClientRect().height / scale;
         fixedHeader.toolbarPlaceholder.style.height = toolbarHeight + "px";
         toolbarBottom = toolbar.getBoundingClientRect().bottom;
+        fixedHeader.backdrop.style.display = "block";
+        fixedHeader.backdrop.style.left = shellRect.left / scale + "px";
+        fixedHeader.backdrop.style.width = shellRect.width / scale + "px";
+        fixedHeader.backdrop.style.height = Math.ceil(toolbarBottom / scale) + "px";
         syncFixedTimeAxis();
         axis = byId(state.viewMode === "daily" ? "daily-head" :
             state.viewMode === "weekly" ? "weekly-head" : "monthly-head");
