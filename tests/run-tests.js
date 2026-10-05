@@ -1540,6 +1540,7 @@ test("固定見出しは拡大率と小数の列幅を保持し、スクロー�
         var copy = {style: {}, getElementsByTagName: function () { return copies; }};
         var overlay = {style: {}, firstChild: copy};
         var scope = vm.createContext({fixedHeader: {axisOverlay: overlay}, currentDisplayZoom: zoom,
+            getFixedCoordinateScale: function () { return scale; },
             state: {viewMode: "weekly"}, byId: function () { return view; }});
         vm.runInContext(source.slice(source.indexOf("    function syncFixedTimeAxis("),
             source.indexOf("    function updateFixedHeader(")), scope);

@@ -167,6 +167,12 @@
         fixedHeader.backdrop = document.createElement("div");
         fixedHeader.backdrop.className = "fixed-header-backdrop screen-only";
         document.body.appendChild(fixedHeader.backdrop);
+        // Measure the coordinate system returned by this browser, not the zoom label.
+        // IE11 may return unscaled rectangles even while CSS zoom is active.
+        fixedHeader.coordinateProbe = document.createElement("div");
+        fixedHeader.coordinateProbe.className = "screen-only";
+        fixedHeader.coordinateProbe.style.cssText = "position:fixed;left:0;top:0;width:100px;height:100px;padding:0;border:0;visibility:hidden;pointer-events:none;";
+        document.body.appendChild(fixedHeader.coordinateProbe);
         fixedHeader.headerPlaceholder.className = "fixed-header-placeholder screen-only";
         fixedHeader.toolbarPlaceholder.className = "fixed-header-placeholder screen-only";
         fixedHeader.axisOverlay.className = "fixed-daily-axis screen-only";
@@ -230,13 +236,19 @@
         syncFixedTimeAxis();
     }
 
+    function getFixedCoordinateScale() {
+        var probe = fixedHeader.coordinateProbe;
+        var scale = probe ? probe.getBoundingClientRect().width / 100 : 1;
+        return isFinite(scale) && scale > 0 ? scale : 1;
+    }
+
     function syncFixedTimeAxis() {
         var overlay = fixedHeader.axisOverlay;
         var view = byId(state.viewMode + "-view");
         var sourceTable = view.getElementsByTagName("table")[0];
         var source = sourceTable.getElementsByTagName("thead")[0];
         var copy = overlay && overlay.firstChild;
-        var scale = currentDisplayZoom / 100;
+        var scale = getFixedCoordinateScale();
         var cells, sourceCells, i, tableRect, headRect, cellRect;
         if (!copy || !source) { return; }
         overlay.style.fontSize = view.style.fontSize;
@@ -271,7 +283,7 @@
         var axis;
         var axisRect;
         var dailyRect;
-        var scale = currentDisplayZoom / 100;
+        var scale = getFixedCoordinateScale();
         var toolbarBottom;
         var headerHeight, toolbarHeight, contentLeft, contentBottom, axisTop;
         if (!fixedHeader.headerPlaceholder) { return; }
