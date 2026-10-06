@@ -978,7 +978,7 @@ test("週間の土日見出しを色分けし予定のない土日だけ半幅�
     var scope = vm.createContext({
         state: {displayDate: new Date(2026, 8, 24)},
         weeklyColumnWeights: [],
-        weeklyDisplaySettings: {showTime: true, showMultiDayLine: false},
+        weeklyGroups: {}, getWeeklySettings: function () { return scope.weeklyDisplaySettings; }, weeklyDisplaySettings: {showTime: true, showMultiDayLine: false},
         currentDisplayZoom: 100,
         startOfWeek: function () { return new Date(2026, 8, 21); },
         byId: function (id) { return elements[id]; },
@@ -1344,7 +1344,8 @@ test("週間・月間の予定に開始終了時刻と横線の設定を保持�
     var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var scope = vm.createContext({
         util: util,
-        weeklyDisplaySettings: {showTime: true, showMultiDayLine: false},
+        weeklyGroups: {}, getWeeklySettings: function () { return scope.weeklyDisplaySettings; }, weeklyDisplaySettings: {showTime: true, showMultiDayLine: false},
+        splitPurpose: function () { return {section: "G", team: ""}; },
         dailyInteraction: {selectedItemId: "", clipboard: null},
         sameDate: function (left, right) {
             return left.getFullYear() === right.getFullYear() &&
@@ -2000,7 +2001,7 @@ test("共有設定は旧形式を読み、新形式を保存・再読込でき�
 test("週間の指定段の途中が空でも、後の予定を上へ詰めない", function () {
     var source = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var a = {id: "a"}, b = {id: "b"};
-    var scope = vm.createContext({layoutEngine: layout, weeklyDisplaySettings: {showMultiDayLine: false},
+    var scope = vm.createContext({layoutEngine: layout, weeklyGroups: {}, getWeeklySettings: function () { return scope.weeklyDisplaySettings; }, weeklyDisplaySettings: {showMultiDayLine: false},
         getItemsForDay: function () { return [a, b]; },
         splitPurpose: function () { return {section: "G", team: ""}; },
         getLayoutRows: function () { return {version: 2, positions: {a: 0, b: 2}}; }});
@@ -2140,7 +2141,7 @@ test("週間表示は保存成功後だけ反映し、読取専用・連打・�
     ["setting-weekly-show-time", "setting-weekly-show-multi-day-line", "save-weekly-settings",
         "reload-weekly-settings", "weekly-settings-status"].forEach(function (id) { controls[id] = {}; });
     var scope = vm.createContext({sharedWeeklySettings: null, weeklySettingsBusy: false,
-        weeklyDisplaySettings: {showTime: true, showMultiDayLine: false}, state: {viewMode: "weekly"},
+        weeklyGroups: {}, getWeeklySettings: function () { return scope.weeklyDisplaySettings; }, weeklyDisplaySettings: {showTime: true, showMultiDayLine: false}, state: {viewMode: "weekly"},
         byId: function (id) { return controls[id]; }, cancelLayoutDrag: function () {},
         renderCurrentView: function () { renders += 1; }, updateFixedHeader: function () {},
         service: {isReadOnly: function () { return readOnly; }}, displaySettingsSource: {
@@ -2174,7 +2175,7 @@ test("週間の日またぎ予定は同じ行に揃い、重複を避けて週�
     var app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
     var a = {id: "a"}, b = {id: "b"}, c = {id: "c"};
     var scope = vm.createContext({layoutEngine: layout, compareItems: function (a, b) { return a.id.localeCompare(b.id); },
-        weeklyDisplaySettings: {showMultiDayLine: true}, util: util,
+        weeklyGroups: {}, getWeeklySettings: function () { return scope.weeklyDisplaySettings; }, weeklyDisplaySettings: {showMultiDayLine: true}, util: util,
         splitPurpose: function () { return {section: "GP1", team: ""}; }});
     vm.runInContext(app.slice(app.indexOf("    function alignWeeklyItemsByLane("), app.indexOf("    function createHeaderCell(")), scope);
     vm.runInContext(app.slice(app.indexOf("    function getLayoutScope("), app.indexOf("    function getLayoutRows(")), scope);

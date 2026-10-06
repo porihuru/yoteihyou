@@ -1025,23 +1025,23 @@ body.dark-mode .fixed-header-backdrop { background: #1c2a38; }
     margin-top: 10px;
 }
 
-.weekly-schedule.weekly-lines-enabled .organization-schedule-cell {
+.weekly-schedule .weekly-lines-enabled .organization-schedule-cell {
     overflow: visible;
     vertical-align: top;
 }
 
-.weekly-schedule.weekly-lines-enabled .event-item.period-event {
+.weekly-schedule .weekly-lines-enabled .event-item.period-event {
     padding-left: 0;
     padding-right: 0;
 }
 
-.weekly-schedule.weekly-lines-enabled .period-event-times {
+.weekly-schedule .weekly-lines-enabled .period-event-times {
     white-space: nowrap;
     overflow: hidden;
 }
 
-.weekly-schedule.weekly-lines-enabled .period-event-times,
-.weekly-schedule.weekly-lines-enabled .period-event-caption {
+.weekly-schedule .weekly-lines-enabled .period-event-times,
+.weekly-schedule .weekly-lines-enabled .period-event-caption {
     padding-left: 4px;
     padding-right: 4px;
 }

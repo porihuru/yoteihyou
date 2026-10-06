@@ -355,6 +355,7 @@
             </div>
             <div class="cookie-settings">
                 <strong>週間予定表の表示（全利用者共通）</strong>
+                <p>以下は個別設定のないグループに適用する共通の初期値です。</p>
                 <div class="weekly-display-settings">
                     <label><input type="checkbox" id="setting-weekly-show-time" checked disabled> 時刻を表示する</label>
                     <label><input type="checkbox" id="setting-weekly-show-multi-day-line" disabled> 日をまたぐ予定に横線を表示する</label>
@@ -363,6 +364,17 @@
                 <button type="button" id="save-weekly-settings" class="button button-primary" disabled>週間表示設定をリストに保存</button>
                 <button type="button" id="reload-weekly-settings" class="button">週間表示設定を再読込</button>
                 <div id="weekly-settings-status" class="settings-status" aria-live="polite"></div>
+            </div>
+            <div class="cookie-settings">
+                <h3>週間予定表のグループ別設定</h3>
+                <label>対象グループ <select id="weekly-group-target"></select></label>
+                <p><label><input type="checkbox" id="weekly-group-inherit" checked> 共通の初期値を使用する</label></p>
+                <p><label><input type="checkbox" id="weekly-group-time"> 開始・終了時刻を表示する</label></p>
+                <p><label><input type="checkbox" id="weekly-group-line"> 日をまたぐ予定を横線でつなぐ（オフは日ごとに表示）</label></p>
+                <p>「予定表更新」を押し、対象を選んで設定します。大グループ共通の予定と各小グループは別々に設定します。終日予定は時刻を表示しません。週間の画面と印刷に適用します。</p>
+                <button type="button" id="weekly-group-save" class="button button-primary">このグループの設定を保存</button>
+                <button type="button" id="weekly-group-reload" class="button">グループ別設定を再読込</button>
+                <div id="weekly-group-status" role="status" aria-live="polite"></div>
             </div>
             <div class="cookie-settings">
                 <strong>システムログの記録（全利用者共通）</strong>
@@ -408,6 +420,7 @@
     <script src="js/access-counter.js"></script>
     <script src="js/sharepoint-settings-data-source.js"></script>
     <script src="js/display-settings-data-source.js"></script>
+    <script src="js/weekly-group-settings.js"></script>
     <script src="js/schedule-layout.js"></script>
     <script src="js/group-calendar-source.js"></script>
     <script src="js/data-service.js"></script>

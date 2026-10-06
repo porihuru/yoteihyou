@@ -29,6 +29,22 @@
     var sharedWeeklySettings = null;
     var weeklySettingsBusy = false;
     var weeklyDisplaySettings = {showTime: true, showMultiDayLine: false};
+    var weeklyGroups = new window.YoteihyouWeeklyGroups(config.sharePoint,
+        function () { return weeklyDisplaySettings; }, function () {
+            var rows = [];
+            getOrganizationGroups().forEach(function (g) {
+                rows.push({section: g.name, team: "", label: g.name + "（大グループ共通）"});
+                getOrganizationTeams(g).forEach(function (t) {
+                    rows.push({section: g.name, team: t.name, label: joinOrganization(g.name, t.name)});
+                });
+            });
+            return rows;
+        }, function () { return !service.isReadOnly(); }, function () {
+            cancelLayoutDrag(); selectedLayoutScope = "";
+            if (state.viewMode === "weekly") { renderCurrentView(); }
+        });
+
+    function getWeeklySettings(section, team) { return weeklyGroups.get(section, team); }
     var layoutEngine = window.YoteihyouScheduleLayout;
     var layoutSource = new layoutEngine.Source(config.sharePoint);
     var layoutRecord = null;
@@ -411,12 +427,12 @@
 
     function getLayoutScope(item, day, viewMode) {
         var purpose = splitPurpose(item.purpose || "");
-        return JSON.stringify([getLayoutDateScope(day, viewMode), purpose.section, purpose.team]);
+        return JSON.stringify([getLayoutDateScope(day, viewMode, purpose.section, purpose.team), purpose.section, purpose.team]);
     }
 
-    function getLayoutDateScope(day, viewMode) {
+    function getLayoutDateScope(day, viewMode, section, team) {
         return viewMode === "monthly" ? "month" :
-            viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine ? "week" : util.formatDateKey(day);
+            viewMode === "weekly" && getWeeklySettings(section, team).showMultiDayLine ? "week" : util.formatDateKey(day);
     }
 
     function getLayoutRows(item, day, viewMode) {
@@ -626,7 +642,7 @@
         if (!target || target === document.body) {
             cell = findParentByClass(hit, "daily-timeline-cell") || findParentByClass(hit, "organization-schedule-cell");
             meta = cell && (cell._dailyMeta || cell._periodMeta);
-            scope = meta && JSON.stringify([getLayoutDateScope(meta.day, state.viewMode), meta.section, meta.team]);
+            scope = meta && JSON.stringify([getLayoutDateScope(meta.day, state.viewMode, meta.section, meta.team), meta.section, meta.team]);
             if (scope === drag.scope) {
                 candidates = document.querySelectorAll("#" + state.viewMode + "-view [data-layout-id]");
                 for (i = 0; i < candidates.length; i += 1) {
@@ -1027,6 +1043,7 @@
     }
 
     function updateWeeklySettingsControls() {
+        if (weeklyGroups.show) { weeklyGroups.show(); }
         var disabled = weeklySettingsBusy || !sharedWeeklySettings || service.isReadOnly();
         byId("setting-weekly-show-time").disabled = disabled;
         byId("setting-weekly-show-multi-day-line").disabled = disabled;
@@ -1556,6 +1573,8 @@
     }
 
     function createEventButton(item, day, viewMode, showCaption) {
+        var purpose = splitPurpose(item.purpose || "");
+        var weeklySettings = getWeeklySettings(purpose.section, purpose.team);
         var button = document.createElement("button");
         var times = document.createElement("span");
         var line = document.createElement("span");
@@ -1569,10 +1588,10 @@
         var endTime = formatDailyTime(endDate.getHours() * 60 + endDate.getMinutes());
         button.type = "button";
         button.className = "event-item period-event";
-        if (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine && !sameDate(item.startDate, endDate)) {
+        if (viewMode === "weekly" && weeklySettings.showMultiDayLine && !sameDate(item.startDate, endDate)) {
             button.className += " period-multiday";
         }
-        if (viewMode === "monthly" || (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine)) {
+        if (viewMode === "monthly" || (viewMode === "weekly" && weeklySettings.showMultiDayLine)) {
             if (!startHere) { button.className += " period-continues-before"; }
             if (!endHere) { button.className += " period-continues-after"; }
         }
@@ -1589,7 +1608,7 @@
         if (util.normalizeTextColor(item.textColor) !== "default") {
             times.className += " event-text-color-" + util.normalizeTextColor(item.textColor);
         }
-        if (!item.allDay && viewMode !== "monthly" && (viewMode !== "weekly" || weeklyDisplaySettings.showTime)) {
+        if (!item.allDay && viewMode !== "monthly" && (viewMode !== "weekly" || weeklySettings.showTime)) {
             times.appendChild(document.createTextNode(startHere && endHere ?
                 startTime + "–" + endTime : startHere ? startTime + "→" :
                 endHere ? "→" + endTime : "継続"));
@@ -1827,7 +1846,7 @@
                 result.push(dayItems[i]);
             }
         }
-        if (viewMode === "weekly" && !weeklyDisplaySettings.showMultiDayLine && result.length) {
+        if (viewMode === "weekly" && !getWeeklySettings(section, team).showMultiDayLine && result.length) {
             var savedRows = getLayoutRows(result[0], day, viewMode);
             if (savedRows) {
                 var packed = layoutEngine.pack(result.map(function (item) { return {id: item.id, start: 0, end: 1}; }), savedRows);
@@ -2067,7 +2086,7 @@
                     itemsByDate = monthlyLayout.itemsByDate;
                     requiredRows = monthlyLayout.requiredRows;
                 }
-                if (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine && !collapsed) {
+                if (viewMode === "weekly" && getWeeklySettings(block.section, block.team).showMultiDayLine && !collapsed) {
                     monthlyLayout = alignWeeklyItemsByLane(itemsByDate,
                         layoutReady && layoutRecord ? layoutRecord.orders[JSON.stringify(["week", block.section, block.team])] : null);
                     itemsByDate = monthlyLayout.itemsByDate;
@@ -2076,6 +2095,9 @@
                 rowCount = collapsed ? 1 : getRenderedRowCount(block, requiredRows);
                 for (rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
                     row = document.createElement("tr");
+                    if (viewMode === "weekly" && getWeeklySettings(block.section, block.team).showMultiDayLine) {
+                        row.className = "weekly-lines-enabled";
+                    }
                     row.setAttribute("data-print-section", block.section);
                     row.setAttribute("data-print-team", block.team);
                     row.setAttribute("data-print-block", "1");
@@ -2127,7 +2149,7 @@
                         if (item) {
                             scheduleCell.appendChild(decorateLayoutButton(createEventButton(item, date, viewMode,
                                 viewMode !== "monthly" || j === 0 || !itemOccursOn(item, dates[j - 1])), item, date, viewMode, rowIndex,
-                                viewMode === "monthly" || (viewMode === "weekly" && weeklyDisplaySettings.showMultiDayLine) ?
+                                viewMode === "monthly" || (viewMode === "weekly" && getWeeklySettings(block.section, block.team).showMultiDayLine) ?
                                     monthlyLayout.spans[String(item.id)] : null));
                         } else {
                             scheduleCell.appendChild(document.createTextNode("\u00a0"));
@@ -2747,8 +2769,7 @@
     }
 
     function renderWeekly() {
-        byId("weekly-table").className = "schedule-list organization-schedule weekly-schedule" +
-            (weeklyDisplaySettings.showMultiDayLine ? " weekly-lines-enabled" : "");
+        byId("weekly-table").className = "schedule-list organization-schedule weekly-schedule";
         var firstDay = startOfWeek(state.displayDate);
         var lastDay = new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + 6);
         var dates = [];
@@ -4067,11 +4088,13 @@
                 service.recordSettingsChange(action, before, after, done);
             },
             onOpen: function () {
+                weeklyGroups.refresh();
                 closeEditor();
                 closeHistory();
             },
             onApply: function (newOrganizationConfig) {
                 organizationConfig = newOrganizationConfig;
+                weeklyGroups.refresh();
                 if (service.sources.sharepoint.configure) { service.sources.sharepoint.configure(organizationConfig); }
                 loadOrganizationSections("", "");
                 reloadData("");
@@ -4081,6 +4104,7 @@
         renderCurrentView();
         loadFontSettings();
         loadWeeklySettings();
+        weeklyGroups.initialize();
         holidays.initialize();
         reloadData("");
         checkSystemConnections();
