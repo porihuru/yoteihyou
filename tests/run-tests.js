@@ -861,7 +861,7 @@ test("月間の件名は省略せず右端で左へ広げる", function () {
     assert.strictEqual(captions[1].style.width, "142px");
     assert.strictEqual(captions[1].style.left, "-104px");
     assert.strictEqual(captions[1].style.textAlign, "right");
-    assert.ok(/\.monthly-schedule \.period-event-caption\s*\{[^}]*overflow:\s*visible;[^}]*text-overflow:\s*clip;[^}]*white-space:\s*nowrap;/.test(css));
+    assert.ok(/\.monthly-schedule \.period-event-caption\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*clip;[^}]*white-space:\s*nowrap;/.test(css));
     assert.ok(app.indexOf('constrainMonthlyCaptions(head.parentNode)') >= 0);
     assert.ok(app.indexOf('constrainMonthlyCaptions(table)') >= 0);
 });

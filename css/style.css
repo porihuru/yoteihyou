@@ -1114,7 +1114,7 @@ body.dark-mode .fixed-header-backdrop { background: #1c2a38; }
     position: relative;
     z-index: 2;
     padding-left: 3px;
-    overflow: visible;
+    overflow: hidden;
     box-sizing: border-box;
     text-overflow: clip;
     white-space: nowrap;

@@ -182,6 +182,7 @@
         if (window.ResizeObserver) {
             fixedHeader.resizeObserver = new window.ResizeObserver(function () {
                 updateWeeklyColumnWidths();
+                refreshMonthlyCaptions();
                 updateFixedHeader();
             });
             ["app", "monthly-view", "weekly-view", "daily-view"].forEach(function (id) {
@@ -216,6 +217,7 @@
     }
 
     function refreshFixedTimeAxis() {
+        refreshMonthlyCaptions();
         var overlay = fixedHeader.axisOverlay;
         var viewId = state.viewMode === "daily" ? "daily-view" :
             state.viewMode === "weekly" ? "weekly-view" : "monthly-view";
@@ -1974,7 +1976,8 @@
 
     function constrainMonthlyCaptions(table) {
         var captions = table.querySelectorAll(".period-event-caption");
-        var tableRight = table.getBoundingClientRect().right;
+        var tableRect = table.getBoundingClientRect();
+        var tableRight = tableRect.right;
         var caption;
         var rect;
         var zoomRatio;
@@ -1986,16 +1989,28 @@
             caption.style.width = "";
             caption.style.left = "";
             caption.style.textAlign = "";
+            caption.style.maxWidth = "none";
             rect = caption.getBoundingClientRect();
             zoomRatio = rect.width ? caption.offsetWidth / rect.width : 1;
+            if (!isFinite(zoomRatio) || zoomRatio <= 0) { zoomRatio = 1; }
             naturalWidth = caption.scrollWidth + 2;
-            if (rect.left + naturalWidth / zoomRatio > rightLimit) {
-                caption.style.width = naturalWidth + "px";
-                caption.style.left = ((rightLimit - naturalWidth / zoomRatio - rect.left) * zoomRatio) + "px";
+            // Limit exceptionally long titles to the table, without shrinking the font.
+            caption.style.maxWidth = Math.max(0, (tableRight - tableRect.left - 4) * zoomRatio) + "px";
+            caption.style.width = naturalWidth + "px";
+            // Measure AFTER assigning the width: alignment and browser zoom can move it.
+            rect = caption.getBoundingClientRect();
+            if (rect.right > rightLimit) {
+                caption.style.left = ((rightLimit - rect.right) * zoomRatio) + "px";
                 caption.style.textAlign = "right";
-            } else {
-                caption.style.width = naturalWidth + "px";
             }
+        }
+    }
+
+    function refreshMonthlyCaptions() {
+        var view = byId("monthly-view");
+        var table = view && view.getElementsByTagName("table")[0];
+        if (state.viewMode === "monthly" && table && table.offsetWidth) {
+            constrainMonthlyCaptions(table);
         }
     }
 
